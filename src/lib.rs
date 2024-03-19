@@ -78,10 +78,11 @@ use {
   tokio::{runtime::Runtime, task},
 };
 
+pub use self::runebeta::RuneBetaIndex as Index;
 pub use self::{
   chain::Chain,
   fee_rate::FeeRate,
-  index::{Index, MintEntry, RuneEntry},
+  index::{MintEntry, RuneEntry},
   inscriptions::{Envelope, Inscription, InscriptionId},
   object::Object,
   options::Options,
@@ -104,7 +105,6 @@ macro_rules! tprintln {
     }
   };
 }
-
 pub mod api;
 pub mod arguments;
 mod blocktime;
@@ -118,7 +118,9 @@ pub mod options;
 pub mod outgoing;
 mod re;
 mod representation;
+pub mod runebeta;
 pub mod runes;
+pub mod schema;
 mod settings;
 pub mod subcommand;
 mod tally;
