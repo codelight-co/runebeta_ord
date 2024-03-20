@@ -1,12 +1,13 @@
+use crate::MintEntry;
 use diesel::{
   deserialize::{FromSql, FromSqlRow},
-  dsl::IsNull,
   pg::{Pg, PgValue},
   prelude::*,
-  serialize::{Output, ToSql},
+  serialize::{IsNull, Output, ToSql},
   sql_types::{Binary, Jsonb, Text},
   AsExpression,
 };
+use std::io::Write;
 
 //https://stackoverflow.com/questions/77629993/error-extending-diesel-with-wrapper-type-for-u128
 #[derive(
@@ -92,7 +93,11 @@ impl FromSql<Jsonb, Pg> for MintEntryType {
     todo!()
   }
 }
-
+impl From<&MintEntry> for MintEntryType {
+  fn from(value: &MintEntry) -> Self {
+    todo!()
+  }
+}
 //Transaction
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = crate::schema::transactions)]
@@ -181,7 +186,7 @@ pub struct TxRuneEntry {
   pub timestamp: i32,
 }
 
-#[derive(Insertable, PartialEq, Debug)]
+#[derive(Insertable, PartialEq, Debug, AsChangeset)]
 #[diesel(table_name = crate::schema::transaction_rune_entries)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTxRuneEntry<'a> {
