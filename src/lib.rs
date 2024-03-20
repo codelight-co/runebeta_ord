@@ -23,6 +23,7 @@ use {
       teleburn, Charm, ParsedEnvelope,
     },
     representation::Representation,
+    //runebeta::establish_pgconnection,
     runes::Etching,
     settings::Settings,
     subcommand::{Subcommand, SubcommandResult},
@@ -104,7 +105,6 @@ macro_rules! tprintln {
     }
   };
 }
-
 pub mod api;
 pub mod arguments;
 mod blocktime;
@@ -118,6 +118,7 @@ pub mod options;
 pub mod outgoing;
 mod re;
 mod representation;
+//pub mod runebeta;
 pub mod runes;
 mod settings;
 pub mod subcommand;
