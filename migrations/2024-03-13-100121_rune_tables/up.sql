@@ -49,7 +49,8 @@ CREATE TABLE outpoint_rune_balances (
     id BIGSERIAL PRIMARY KEY,
     tx_hash VARCHAR NOT NULL,
     vout INTEGER NOT NULL,
-    balance_id VARCHAR NOT NULL,
+    rune_block INTEGER NOT NULL,
+    rune_tx SMALLINT NOT NULL,
     balance_value VARCHAR NOT NULL
 );
 

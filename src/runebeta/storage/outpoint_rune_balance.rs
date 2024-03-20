@@ -34,6 +34,13 @@ impl<'conn> OutpointRuneBalaneTable<'conn> {
       .values(payload)
       .get_result(self.connection)
   }
+  //Remove all balance by single outpoint
+  pub fn remove(
+    &mut self,
+    outpoint: &OutPoint,
+  ) -> Result<Vec<OutpointRuneBalance>, diesel::result::Error> {
+    Ok(Vec::new())
+  }
 
   // pub fn get(&self, outpoint: &OutPoint) -> Result<Option<i64>, diesel::result::Error> {
   //   outpoint_values

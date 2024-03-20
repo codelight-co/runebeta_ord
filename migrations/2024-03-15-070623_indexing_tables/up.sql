@@ -9,7 +9,7 @@ CREATE TABLE statistics (
     index_sats BOOLEAN NOT NULL DEFAULT 'true',
     lost_sats INTEGER NOT NULL DEFAULT 0,
     outputs_traversed INTEGER NOT NULL DEFAULT 0,
-    reserved_runes INTEGER NOT NULL DEFAULT 0,
+    reserved_runes BIGINT NOT NULL DEFAULT 0,
     runes BIGINT NOT NULL DEFAULT 0,
     satranges BIGINT NOT NULL DEFAULT 0,
     unbound_inscriptions INTEGER NOT NULL DEFAULT 0,

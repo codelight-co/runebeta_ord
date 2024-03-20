@@ -25,8 +25,9 @@ use {
     },
     runebeta::storage::statistic::StatisticTable,
     runes::{Rune, RuneId},
-    subcommand::{find::FindRangeOutput, server::query},
-    templates::StatusHtml,
+    subcommand::find::FindRangeOutput,
+    //subcommand::server::query
+    //templates::StatusHtml,
     *,
   },
   bitcoin::block::Header,
@@ -385,7 +386,7 @@ impl RuneBetaIndex {
       Err(error) => bail!("failed to open index: {error}"),
     };
     */
-    let statistic_table = StatisticTable::new(&mut pg_connection);
+    let mut statistic_table = StatisticTable::new(&mut pg_connection);
     let statistics = statistic_table.get_or_create_indexing_statistic()?;
     let index_runes = statistics.index_runes;
     let index_sats = statistics.index_runes;
@@ -1704,9 +1705,9 @@ impl RuneBetaIndex {
   //   )
   // }
 
-  pub fn inscription_info_benchmark(index: &Index, inscription_number: i32) {
-    Self::inscription_info(index, query::Inscription::Number(inscription_number)).unwrap();
-  }
+  // pub fn inscription_info_benchmark(index: &Index, inscription_number: i32) {
+  //   Self::inscription_info(index, query::Inscription::Number(inscription_number)).unwrap();
+  // }
 
   // pub(crate) fn inscription_info(
   //   index: &Index,
@@ -4440,7 +4441,7 @@ mod tests {
           Inscription {
             content_type: Some("text/plain".into()),
             body: Some("hello".into()),
-            parent: Some(parent_inscription_id.value()),
+            parents: vec![parent_inscription_id.value()],
             ..Default::default()
           }
           .to_witness(),
@@ -4487,7 +4488,7 @@ mod tests {
           Inscription {
             content_type: Some("text/plain".into()),
             body: Some("hello".into()),
-            parent: Some(parent_inscription_id.value()),
+            parents: vec![parent_inscription_id.value()],
             ..Default::default()
           }
           .to_witness(),
@@ -4541,7 +4542,7 @@ mod tests {
             Inscription {
               content_type: Some("text/plain".into()),
               body: Some("hello".into()),
-              parent: Some(parent_inscription_id.value()),
+              parents: vec![parent_inscription_id.value()],
               ..Default::default()
             }
             .to_witness(),
@@ -4595,7 +4596,7 @@ mod tests {
             Inscription {
               content_type: Some("text/plain".into()),
               body: Some("hello".into()),
-              parent: Some(parent_inscription_id.value()),
+              parents: vec![parent_inscription_id.value()],
               ..Default::default()
             }
             .to_witness(),
@@ -4649,13 +4650,11 @@ mod tests {
           Inscription {
             content_type: Some("text/plain".into()),
             body: Some("hello".into()),
-            parent: Some(
-              parent_inscription_id
-                .value()
-                .into_iter()
-                .chain(iter::once(0))
-                .collect(),
-            ),
+            parents: vec![parent_inscription_id
+              .value()
+              .into_iter()
+              .chain(iter::once(0))
+              .collect()],
             ..Default::default()
           }
           .to_witness(),
@@ -4828,7 +4827,7 @@ mod tests {
       let child_inscription = Inscription {
         content_type: Some("text/plain".into()),
         body: Some("pointer-child".into()),
-        parent: Some(parent_inscription_id.value()),
+        parents: vec![parent_inscription_id.value()],
         pointer: Some(0u64.to_le_bytes().to_vec()),
         ..Default::default()
       };
@@ -5746,7 +5745,7 @@ mod tests {
         sequence_number: 0,
         block_height: 2,
         charms: expected_charms,
-        parent_inscription_id: None
+        parent_inscription_ids: Vec::new()
       }
     );
 

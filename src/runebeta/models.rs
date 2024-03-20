@@ -1,30 +1,69 @@
 use diesel::{
   deserialize::{FromSql, FromSqlRow},
   dsl::IsNull,
-  expression::AsExpression,
-  pg::Pg,
+  pg::{Pg, PgValue},
   prelude::*,
   serialize::{Output, ToSql},
-  sql_types::{Jsonb, Text},
+  sql_types::{Binary, Jsonb, Text},
+  AsExpression,
 };
 //https://stackoverflow.com/questions/77629993/error-extending-diesel-with-wrapper-type-for-u128
-#[derive(FromSqlRow, AsExpression, serde::Serialize, serde::Deserialize, Debug, Default)]
+#[derive(
+  FromSqlRow,
+  AsExpression,
+  serde::Serialize,
+  serde::Deserialize,
+  Debug,
+  PartialEq,
+  Eq,
+  PartialOrd,
+  Default,
+)]
 #[diesel(sql_type = Text)]
 pub struct U128(pub u128);
+
+impl From<u128> for U128 {
+  fn from(v: u128) -> U128 {
+    U128(v)
+  }
+}
+
+impl From<U128> for u128 {
+  fn from(v: U128) -> u128 {
+    v.0
+  }
+}
+
 impl ToSql<Text, Pg> for U128 {
   fn to_sql<'b>(&self, out: &mut Output<'b, '_, Pg>) -> diesel::serialize::Result {
     write!(out, "{}", self.0.to_string())?;
     Ok(IsNull::No)
   }
 }
+impl ToSql<Binary, Pg> for U128 {
+  fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> diesel::serialize::Result {
+    write!(out, "{}", self.0.to_ne_bytes())?;
+    Ok(IsNull::No)
+  }
+}
 
 impl FromSql<Text, Pg> for U128 {
-  fn from_sql(bytes: Option<&[u8]>) -> diesel::deserialize::Result<Self> {
+  fn from_sql(
+    bytes: <Pg as diesel::backend::Backend>::RawValue<'_>,
+  ) -> diesel::deserialize::Result<Self> {
     let s = String::from_utf8_lossy(bytes.as_bytes());
     Ok(U128(s.parse()?))
   }
 }
 
+impl FromSql<Binary, Pg> for U128 {
+  fn from_sql(
+    bytes: <Pg as diesel::backend::Backend>::RawValue<'_>,
+  ) -> diesel::deserialize::Result<Self> {
+    let value = u128::from_ne_bytes(*(bytes.as_bytes()));
+    Ok(U128(value))
+  }
+}
 #[derive(FromSqlRow, AsExpression, serde::Serialize, serde::Deserialize, Debug, Default)]
 #[diesel(sql_type = Jsonb)]
 pub struct MintEntry {}
@@ -52,8 +91,10 @@ pub struct OutpointRuneBalance {
   pub id: i64,
   pub tx_hash: String,
   pub vout: i32,
-  pub balance_id: U128,
-  pub balance_value: U128,
+  pub rune_block: i32,
+  pub rune_tx: i16,
+  #[diesel(serialize_as = U128, deserialize_as = U128)]
+  pub balance_value: u128,
 }
 
 #[derive(Insertable)]
@@ -61,7 +102,8 @@ pub struct OutpointRuneBalance {
 pub struct NewOutpointRuneBalance<'a> {
   pub tx_hash: &'a str,
   pub vout: i32,
-  pub balance_id: &'a U128,
+  pub rune_block: i32,
+  pub rune_tx: i16,
   pub balance_value: &'a U128,
 }
 
@@ -108,7 +150,8 @@ pub struct RuneEntries {
   pub id: i64,
   pub rune_height: i32,
   pub rune_index: i16,
-  pub burned: U128,
+  #[diesel(deserialize_as = U128)]
+  pub burned: u128,
   pub divisibility: i16,
   pub etching: String,
   pub mint: Option<MintEntry>,
@@ -121,12 +164,13 @@ pub struct RuneEntries {
   pub timestamp: i32,
 }
 
-#[derive(Insertable)]
+#[derive(Insertable, PartialEq, Debug)]
 #[diesel(table_name = crate::schema::rune_entries)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewRuneEntries<'a> {
   pub rune_height: i32,
   pub rune_index: i16,
+  #[diesel(serialize_as = U128)]
   pub burned: U128,
   pub divisibility: i16,
   pub etching: &'a str,
@@ -182,7 +226,7 @@ pub struct IndexingStatistic {
   pub index_sats: bool,
   pub lost_sats: i32,
   pub outputs_traversed: i32,
-  pub reserved_runes: i32,
+  pub reserved_runes: i64,
   pub runes: i64,
   pub satranges: i64,
   pub unbound_inscriptions: i32,
@@ -203,7 +247,7 @@ pub struct NewIndexingStatistic {
   pub index_sats: bool,
   pub lost_sats: i32,
   pub outputs_traversed: i32,
-  pub reserved_runes: i32,
+  pub reserved_runes: i64,
   pub runes: i64,
   pub satranges: i64,
   pub unbound_inscriptions: i32,

@@ -32,7 +32,7 @@ impl<'conn> RuneEntryTable<'conn> {
         divisibility.eq(payload.divisibility),
         etching.eq(payload.etching),
         mint.eq(payload.mint),
-        rnumber.eq(payload.rnumber),
+        number.eq(payload.number),
         spacers.eq(payload.spacers),
         supply.eq(payload.supply),
       ))
@@ -41,8 +41,8 @@ impl<'conn> RuneEntryTable<'conn> {
     //.expect("Error saving satpoint")
   }
   pub fn get(&mut self, rune_id: &RuneId) -> Result<Option<RuneEntries>, diesel::result::Error> {
-    let height = rune_id.height as i32;
-    let index = rune_id.index as i16;
+    let height = rune_id.block as i32;
+    let index = rune_id.tx as i16;
     rune_entries
       .filter(rune_height.eq(&height))
       .filter(rune_index.eq(&index))

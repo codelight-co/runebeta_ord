@@ -40,9 +40,9 @@ pub use {self::entry::RuneEntry, entry::MintEntry};
 
 pub(crate) mod entry;
 pub mod event;
-mod fetcher;
-mod reorg;
-mod rtx;
+pub mod fetcher;
+pub mod reorg;
+pub mod rtx;
 mod updater;
 
 #[cfg(test)]

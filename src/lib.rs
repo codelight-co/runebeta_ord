@@ -202,24 +202,24 @@ fn uncheck(address: &Address) -> Address<NetworkUnchecked> {
   address.to_string().parse().unwrap()
 }
 
-pub fn parse_ord_server_args(args: &str) -> (Settings, subcommand::server::Server) {
-  match Arguments::try_parse_from(args.split_whitespace()) {
-    Ok(arguments) => match arguments.subcommand {
-      Subcommand::Server(server) => (
-        Settings::merge(
-          arguments.options,
-          vec![("INTEGRATION_TEST".into(), "1".into())]
-            .into_iter()
-            .collect(),
-        )
-        .unwrap(),
-        server,
-      ),
-      subcommand => panic!("unexpected subcommand: {subcommand:?}"),
-    },
-    Err(err) => panic!("error parsing arguments: {err}"),
-  }
-}
+// pub fn parse_ord_server_args(args: &str) -> (Settings, subcommand::server::Server) {
+//   match Arguments::try_parse_from(args.split_whitespace()) {
+//     Ok(arguments) => match arguments.subcommand {
+//       Subcommand::Server(server) => (
+//         Settings::merge(
+//           arguments.options,
+//           vec![("INTEGRATION_TEST".into(), "1".into())]
+//             .into_iter()
+//             .collect(),
+//         )
+//         .unwrap(),
+//         server,
+//       ),
+//       subcommand => panic!("unexpected subcommand: {subcommand:?}"),
+//     },
+//     Err(err) => panic!("error parsing arguments: {err}"),
+//   }
+// }
 
 fn gracefully_shutdown_indexer() {
   if let Some(indexer) = INDEXER.lock().unwrap().take() {

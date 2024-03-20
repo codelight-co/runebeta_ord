@@ -60,15 +60,15 @@ impl<'conn> StatisticTable<'conn> {
       }
     }
   }
-  pub fn get_reserved_runes(&mut self) -> Result<i32, diesel::result::Error> {
+  pub fn get_reserved_runes(&mut self) -> Result<i64, diesel::result::Error> {
     statistics
       .select(reserved_runes)
       .limit(1)
-      .get_result::<i32>(self.connection)
+      .get_result::<i64>(self.connection)
   }
   pub fn set_reserved_runes(
     &mut self,
-    value: i32,
+    value: i64,
   ) -> Result<IndexingStatistic, diesel::result::Error> {
     match statistics
       .select(IndexingStatistic::as_select())

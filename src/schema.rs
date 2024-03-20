@@ -69,7 +69,8 @@ diesel::table! {
         id -> Int8,
         tx_hash -> Varchar,
         vout -> Int4,
-        balance_id -> Varchar,
+        rune_block -> Int4,
+        rune_tx -> Int2,
         balance_value -> Varchar,
     }
 }
@@ -97,7 +98,7 @@ diesel::table! {
         id -> Int8,
         rune_height -> Int4,
         rune_index -> Int2,
-        burned -> Bytea,
+        burned -> Text,
         divisibility -> Int2,
         etching -> Varchar,
         mints -> Int8,
@@ -152,7 +153,7 @@ diesel::table! {
         index_sats -> Bool,
         lost_sats -> Int4,
         outputs_traversed -> Int4,
-        reserved_runes -> Int4,
+        reserved_runes -> Int8,
         runes -> Int8,
         satranges -> Int8,
         unbound_inscriptions -> Int4,

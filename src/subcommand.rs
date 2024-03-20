@@ -16,6 +16,7 @@ pub mod supply;
 pub mod teleburn;
 pub mod traits;
 pub mod wallet;
+use super::index::Index;
 
 #[derive(Debug, Parser)]
 pub(crate) enum Subcommand {
