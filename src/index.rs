@@ -22,7 +22,6 @@ use {
     Client,
   },
   chrono::SubsecRound,
-  diesel::PgConnection,
   indicatif::{ProgressBar, ProgressStyle},
   log::log_enabled,
   redb::{
@@ -225,7 +224,6 @@ pub struct Index {
   path: PathBuf,
   started: DateTime<Utc>,
   unrecoverably_reorged: AtomicBool,
-  pg_connection: Option<PgConnection>,
 }
 
 impl Index {
@@ -403,7 +401,6 @@ impl Index {
 
     let genesis_block_coinbase_transaction =
       settings.chain().genesis_block().coinbase().unwrap().clone();
-    //let pg_connection = establish_pgconnection();
     Ok(Self {
       genesis_block_coinbase_txid: genesis_block_coinbase_transaction.txid(),
       client,
@@ -421,7 +418,6 @@ impl Index {
       path,
       started: Utc::now(),
       unrecoverably_reorged: AtomicBool::new(false),
-      pg_connection: None,
     })
   }
 
@@ -614,7 +610,6 @@ impl Index {
         range_cache: HashMap::new(),
         sat_ranges_since_flush: 0,
       };
-
       match updater.update_index(wtx) {
         Ok(ok) => return Ok(ok),
         Err(err) => {

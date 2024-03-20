@@ -444,6 +444,7 @@ impl<'index> Updater<'index> {
       unbound_inscriptions,
       value_cache,
       value_receiver,
+      extension: Some(IndexExtension::new()),
     };
 
     if self.index.index_sats {
@@ -605,6 +606,7 @@ impl<'index> Updater<'index> {
         block_time: block.header.time,
         transaction_id_to_rune: &mut transaction_id_to_rune,
         updates: HashMap::new(),
+        extension: Some(IndexExtension::new()),
       };
 
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {

@@ -67,6 +67,7 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   pub(super) unbound_inscriptions: u64,
   pub(super) value_cache: &'a mut HashMap<OutPoint, u64>,
   pub(super) value_receiver: &'a mut Receiver<u64>,
+  pub(super) extension: Option<IndexExtension>,
 }
 
 impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
@@ -242,7 +243,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       self
         .transaction_id_to_transaction
         .insert(&txid.store(), self.transaction_buffer.as_slice())?;
-
+      if let Some(extension) = &self.extension {
+        let _ = extension.index_transaction(&txid, tx);
+      }
       self.transaction_buffer.clear();
     }
 

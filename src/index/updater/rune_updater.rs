@@ -39,6 +39,7 @@ pub(super) struct RuneUpdater<'a, 'db, 'tx> {
   pub(super) block_time: u32,
   pub(super) transaction_id_to_rune: &'a mut Table<'db, 'tx, &'static TxidValue, u128>,
   pub(super) updates: HashMap<RuneId, RuneUpdate>,
+  pub(super) extension: Option<IndexExtension>,
 }
 
 impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
@@ -281,7 +282,6 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
 
     self.rune_to_id.insert(rune.0, id.store())?;
     self.transaction_id_to_rune.insert(&txid.store(), rune.0)?;
-
     let number = self.runes;
     self.runes += 1;
 
@@ -290,25 +290,28 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
     self
       .statistic_to_count
       .insert(&Statistic::Runes.into(), self.runes)?;
+    let rune_entry = RuneEntry {
+      burned: 0,
+      divisibility,
+      etching: txid,
+      mints: 0,
+      mint: mint.and_then(|mint| (!burn).then_some(mint)),
+      number,
+      premine,
+      rune,
+      spacers,
+      supply: premine,
+      symbol,
+      timestamp: self.block_time,
+    };
+    /*
+     * Taivv March 20, index data to postgres
+     */
+    if let Some(extension) = &self.extension {
+      let _ = extension.index_transaction_rune(&txid, &id, &rune_entry);
+    }
 
-    self.id_to_entry.insert(
-      id.store(),
-      RuneEntry {
-        burned: 0,
-        divisibility,
-        etching: txid,
-        mints: 0,
-        mint: mint.and_then(|mint| (!burn).then_some(mint)),
-        number,
-        premine,
-        rune,
-        spacers,
-        supply: premine,
-        symbol,
-        timestamp: self.block_time,
-      }
-      .store(),
-    )?;
+    self.id_to_entry.insert(id.store(), rune_entry.store())?;
 
     let inscription_id = InscriptionId { txid, index: 0 };
 

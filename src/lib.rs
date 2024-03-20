@@ -23,7 +23,7 @@ use {
       teleburn, Charm, ParsedEnvelope,
     },
     representation::Representation,
-    //runebeta::establish_pgconnection,
+    runebeta::IndexExtension,
     runes::Etching,
     settings::Settings,
     subcommand::{Subcommand, SubcommandResult},
@@ -118,13 +118,14 @@ pub mod options;
 pub mod outgoing;
 mod re;
 mod representation;
-//pub mod runebeta;
+pub mod runebeta;
 pub mod runes;
 mod settings;
 pub mod subcommand;
 mod tally;
 pub mod templates;
 pub mod wallet;
+pub mod schema;
 
 type Result<T = (), E = Error> = std::result::Result<T, E>;
 
