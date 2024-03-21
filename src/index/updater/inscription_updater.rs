@@ -235,7 +235,12 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         id_counter += 1;
       }
     }
-
+    log::info!(
+      "Index transaction {}, inscriptions {}, {:?}",
+      &self.index_transactions,
+      &inscriptions,
+      &self.extension
+    );
     if self.index_transactions && inscriptions {
       tx.consensus_encode(&mut self.transaction_buffer)
         .expect("in-memory writers don't error");
@@ -243,10 +248,11 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       self
         .transaction_id_to_transaction
         .insert(&txid.store(), self.transaction_buffer.as_slice())?;
+      self.transaction_buffer.clear();
+
       if let Some(extension) = &self.extension {
         let _ = extension.index_transaction(&txid, tx);
       }
-      self.transaction_buffer.clear();
     }
 
     let potential_parents = floating_inscriptions

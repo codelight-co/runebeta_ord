@@ -7,7 +7,7 @@ diesel::table! {
         previous_output_hash -> Varchar,
         previous_output_vout -> Int4,
         script_sig -> Text,
-        sequence_number -> Int4,
+        sequence_number -> Int8,
         witness -> Text,
     }
 }

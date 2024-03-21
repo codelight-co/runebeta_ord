@@ -3,7 +3,7 @@ CREATE TABLE transactions (
   id BIGSERIAL PRIMARY KEY,
   version INTEGER NOT NULL,
   lock_time INTEGER NOT NULL,
-  tx_hash VARCHAR NOT NULL
+  tx_hash VARCHAR NOT NULL UNIQUE
 );
 
 CREATE TABLE transaction_ins (
@@ -12,7 +12,7 @@ CREATE TABLE transaction_ins (
   previous_output_hash VARCHAR NOT NULL,
   previous_output_vout INTEGER NOT NULL,
   script_sig TEXT NOT NULL,
-  sequence_number INTEGER NOT NULL,
+  sequence_number BIGINT NOT NULL,
   -- witness_content TEXT NOT NULL,
   -- witness_elements BIGINT NOT NULL,
   -- witness_indices_start BIGINT NOT NULL

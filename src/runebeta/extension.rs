@@ -1,4 +1,4 @@
-use crate::{Rune, RuneEntry, RuneId};
+use crate::{RuneEntry, RuneId};
 
 use super::{
   models::{NewTransaction, NewTransactionIn, NewTransactionOut},
@@ -13,7 +13,7 @@ use dotenvy::dotenv;
 use std::env;
 use std::fmt::Write;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct IndexExtension {
   //connection: PgConnection,
   database_url: String,
@@ -30,7 +30,11 @@ impl IndexExtension {
   pub fn connect(&self) -> Result<PgConnection, ConnectionError> {
     PgConnection::establish(&self.database_url)
   }
-  pub fn index_transaction(&self, txid: &Txid, tx: &Transaction) -> Result<(), anyhow::Error> {
+  pub fn index_transaction(
+    &self,
+    txid: &Txid,
+    tx: &Transaction,
+  ) -> Result<usize, diesel::result::Error> {
     let Transaction {
       version,
       lock_time,
@@ -64,33 +68,42 @@ impl IndexExtension {
           previous_output_hash: txin.previous_output.txid.to_string(),
           previous_output_vout: txin.previous_output.vout as i32,
           script_sig: txin.script_sig.to_hex_string(),
-          sequence_number: txin.sequence.0 as i32,
+          sequence_number: txin.sequence.0 as i64,
           witness,
         }
       })
       .collect();
-    let mut connection = self.connect()?;
+    let connection = self.connect();
+    assert!(connection.is_ok());
+    let mut connection = connection.unwrap();
     let table_tranction = TransactionTable::new();
     let table_transaction_in = TransactionInTable::new();
     let table_transaction_out = TransactionOutTable::new();
-    connection.build_transaction().read_write().run(|conn| {
-      let _ = table_tranction.insert(&new_transaction, conn);
-      let _ = table_transaction_in.insert(&new_transaction_ins, conn);
-      let _ = table_transaction_out.insert(&new_transaction_outs, conn);
-      Ok(())
-    })?;
-
-    Ok(())
+    let res = connection.build_transaction().read_write().run(|conn| {
+      table_tranction.insert(&new_transaction, conn)?;
+      table_transaction_in.insert(&new_transaction_ins, conn)?;
+      table_transaction_out.insert(&new_transaction_outs, conn)
+    });
+    log::debug!("Transaction index result {:?}", &res);
+    res
   }
   pub fn index_transaction_rune(
     &self,
     txid: &Txid,
     rune_id: &RuneId,
     rune_entry: &RuneEntry,
-  ) -> Result<(), anyhow::Error> {
+  ) -> Result<usize, diesel::result::Error> {
+    log::debug!("Runebeta index transaction rune {}, rune {}", txid, rune_id);
     let table_tranction_rune = TransactionRuneEntryTable::new();
-    let mut connection = self.connect()?;
-    let _ = table_tranction_rune.create(txid, rune_id, rune_entry, &mut connection);
-    Ok(())
+    let connection = self.connect();
+    assert!(connection.is_ok());
+    //Must be safe to unwrap;
+    let mut connection = connection.unwrap();
+    let res = connection
+      .build_transaction()
+      .read_write()
+      .run(|conn| table_tranction_rune.create(txid, rune_id, rune_entry, conn));
+    log::debug!("Transaction rune index result {:?}", &res);
+    res
   }
 }

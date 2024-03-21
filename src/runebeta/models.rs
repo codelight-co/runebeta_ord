@@ -1,10 +1,10 @@
 use crate::MintEntry;
 use diesel::{
   deserialize::{FromSql, FromSqlRow},
-  pg::{Pg, PgValue},
+  pg::Pg,
   prelude::*,
   serialize::{IsNull, Output, ToSql},
-  sql_types::{Binary, Jsonb, Text},
+  sql_types::{Jsonb, Text},
   AsExpression,
 };
 use std::io::Write;
@@ -128,7 +128,7 @@ pub struct TransactionIn {
   pub previous_output_hash: String,
   pub previous_output_vout: i32,
   pub script_sig: String,
-  pub sequence_number: i32,
+  pub sequence_number: i64,
   pub witness: String,
 }
 
@@ -140,7 +140,7 @@ pub struct NewTransactionIn {
   pub previous_output_hash: String,
   pub previous_output_vout: i32,
   pub script_sig: String,
-  pub sequence_number: i32,
+  pub sequence_number: i64,
   pub witness: String,
 }
 
