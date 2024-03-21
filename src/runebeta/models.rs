@@ -118,12 +118,36 @@ impl From<&MintEntry> for MintEntryType {
     }
   }
 }
+
+//Block
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = crate::schema::blocks)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct Block {
+  pub id: i64,
+  pub block_time: i64,
+  pub block_height: i64,
+  pub previous_hash: String,
+  pub block_hash: String,
+}
+
+#[derive(AsChangeset, Insertable)]
+#[diesel(table_name = crate::schema::blocks)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewBlock {
+  pub block_time: i64,
+  pub block_height: i64,
+  pub previous_hash: String,
+  pub block_hash: String,
+}
+
 //Transaction
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = crate::schema::transactions)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Transaction {
   pub id: i64,
+  pub block_height: i64,
   pub version: i32,
   pub lock_time: i32,
   pub tx_hash: String,
@@ -134,6 +158,7 @@ pub struct Transaction {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTransaction {
   pub version: i32,
+  pub block_height: i64,
   pub lock_time: i32,
   pub tx_hash: String,
 }
@@ -171,8 +196,13 @@ pub struct NewTransactionIn {
 pub struct TransactionOut {
   pub id: i64,
   pub tx_hash: String,
+  pub vout: i64,
   pub value: i64,
+  pub asm: String,
+  pub dust_value: i64,
+  pub address: Option<String>,
   pub script_pubkey: String,
+  pub spent: bool,
 }
 
 #[derive(Insertable, AsChangeset)]
@@ -180,8 +210,13 @@ pub struct TransactionOut {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTransactionOut {
   pub tx_hash: String,
+  pub vout: i64,
   pub value: i64,
+  pub asm: String,
+  pub dust_value: i64,
+  pub address: Option<String>,
   pub script_pubkey: String,
+  pub spent: bool,
 }
 
 #[derive(Queryable, Selectable)]
@@ -225,4 +260,44 @@ pub struct NewTxRuneEntry<'a> {
   pub supply: U128,
   pub symbol: Option<&'a str>,
   pub timestamp: i32,
+}
+
+//TransactionRune
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = crate::schema::txid_runes)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct TransactionRune {
+  pub id: i64,
+  pub tx_hash: String,
+  pub rune_id: String,
+}
+
+#[derive(Insertable, AsChangeset)]
+#[diesel(table_name = crate::schema::txid_runes)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewTransactionRune {
+  pub tx_hash: String,
+  pub rune_id: String,
+}
+
+//TransactionRuneIdAddress
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = crate::schema::txid_rune_addresss)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct TransactionRuneAddress {
+  pub id: i64,
+  pub tx_hash: String,
+  pub rune_id: String,
+  pub address: String,
+  pub spent: bool,
+}
+
+#[derive(Insertable, AsChangeset)]
+#[diesel(table_name = crate::schema::txid_rune_addresss)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewTransactionRuneAddress {
+  pub tx_hash: String,
+  pub rune_id: String,
+  pub address: String,
+  pub spent: bool,
 }

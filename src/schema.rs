@@ -1,6 +1,16 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    blocks (id) {
+        id -> Int8,
+        previous_hash -> Varchar,
+        block_hash -> Varchar,
+        block_height -> Int8,
+        block_time -> Int8,
+    }
+}
+
+diesel::table! {
     transaction_ins (id) {
         id -> Int8,
         tx_hash -> Varchar,
@@ -16,8 +26,13 @@ diesel::table! {
     transaction_outs (id) {
         id -> Int8,
         tx_hash -> Varchar,
+        vout -> Int8,
         value -> Int8,
+        asm -> Varchar,
+        dust_value -> Int8,
+        address -> Nullable<Varchar>,
         script_pubkey -> Text,
+        spent -> Bool,
     }
 }
 
@@ -45,15 +60,37 @@ diesel::table! {
 diesel::table! {
     transactions (id) {
         id -> Int8,
+        block_height -> Int8,
         version -> Int4,
         lock_time -> Int4,
         tx_hash -> Varchar,
     }
 }
 
+diesel::table! {
+    txid_rune_addresss (id) {
+        id -> Int8,
+        tx_hash -> Varchar,
+        rune_id -> Varchar,
+        address -> Varchar,
+        spent -> Bool,
+    }
+}
+
+diesel::table! {
+    txid_runes (id) {
+        id -> Int8,
+        tx_hash -> Varchar,
+        rune_id -> Varchar,
+    }
+}
+
 diesel::allow_tables_to_appear_in_same_query!(
+    blocks,
     transaction_ins,
     transaction_outs,
     transaction_rune_entries,
     transactions,
+    txid_rune_addresss,
+    txid_runes,
 );

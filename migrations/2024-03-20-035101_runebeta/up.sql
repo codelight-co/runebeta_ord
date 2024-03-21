@@ -1,6 +1,15 @@
 -- Your SQL goes here
+CREATE TABLE blocks (
+  id BIGSERIAL PRIMARY KEY,
+  previous_hash VARCHAR NOT NULL,
+  block_hash VARCHAR NOT NULL,
+  block_height BIGINT NOT NULL UNIQUE,
+  block_time BIGINT NOT NULL
+);
+
 CREATE TABLE transactions (
   id BIGSERIAL PRIMARY KEY,
+  block_height BIGINT NOT NULL,
   version INTEGER NOT NULL,
   lock_time INTEGER NOT NULL,
   tx_hash VARCHAR NOT NULL UNIQUE
@@ -22,8 +31,13 @@ CREATE TABLE transaction_ins (
 CREATE TABLE transaction_outs (
   id BIGSERIAL PRIMARY KEY,
   tx_hash VARCHAR NOT NULL,
+  vout BIGINT NOT NULL,
   value BIGINT NOT NULL,
-  script_pubkey TEXT NOT NULL
+  asm VARCHAR NOT NULL,
+  dust_value BIGINT NOT NULL,
+  address VARCHAR NULL, --Parse from script_pubkey
+  script_pubkey TEXT NOT NULL,
+  spent BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE TABLE transaction_rune_entries (
@@ -48,3 +62,17 @@ CREATE TABLE transaction_rune_entries (
   symbol CHAR NULL,
   timestamp INTEGER NOT NULL
 );
+-- Map transaction and runeid (block and tx)
+CREATE TABLE txid_runes (
+  id BIGSERIAL PRIMARY KEY,
+  tx_hash VARCHAR NOT NULL,
+  rune_id VARCHAR NOT NULL
+);
+
+CREATE TABLE txid_rune_addresss (
+  id BIGSERIAL PRIMARY KEY,
+  tx_hash VARCHAR NOT NULL,
+  rune_id VARCHAR NOT NULL,
+  address VARCHAR NOT NULL,
+  spent BOOLEAN NOT NULL
+)

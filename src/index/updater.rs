@@ -415,7 +415,8 @@ impl<'index> Updater<'index> {
       .unwrap_or(0);
 
     let home_inscription_count = home_inscriptions.len()?;
-
+    let extension = IndexExtension::new(self.height as i64, block.header.clone());
+    let _res = extension.index_block();
     let mut inscription_updater = InscriptionUpdater {
       blessed_inscription_count,
       chain: self.index.settings.chain(),
@@ -444,7 +445,7 @@ impl<'index> Updater<'index> {
       unbound_inscriptions,
       value_cache,
       value_receiver,
-      extension: Some(IndexExtension::new()),
+      extension: Some(extension.clone()),
     };
 
     if self.index.index_sats {
@@ -606,7 +607,7 @@ impl<'index> Updater<'index> {
         block_time: block.header.time,
         transaction_id_to_rune: &mut transaction_id_to_rune,
         updates: HashMap::new(),
-        extension: Some(IndexExtension::new()),
+        extension: Some(extension),
       };
 
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {

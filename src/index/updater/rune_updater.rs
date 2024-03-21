@@ -308,7 +308,7 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
      * Taivv March 20, index data to postgres
      */
     if let Some(extension) = &self.extension {
-      let _ = extension.index_transaction_rune(&txid, &id, &rune_entry);
+      let _ = extension.index_transaction_rune_entry(&txid, &id, &rune_entry);
     }
 
     self.id_to_entry.insert(id.store(), rune_entry.store())?;
