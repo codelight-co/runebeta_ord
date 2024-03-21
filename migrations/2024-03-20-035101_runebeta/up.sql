@@ -39,7 +39,7 @@ CREATE TABLE transaction_rune_entries (
   mints BIGINT NOT NULL,
   number BIGINT NOT NULL,
   -- Mint entry
-  mint_entry jsonb NULL,
+  mint_entry jsonb DEFAULT '{}'::jsonb NOT NULL,
   --U128
   rune TEXT NOT NULL,
   spacers INTEGER NOT NULL,

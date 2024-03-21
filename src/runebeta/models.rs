@@ -11,6 +11,8 @@ use std::io::Write;
 
 //https://stackoverflow.com/questions/77629993/error-extending-diesel-with-wrapper-type-for-u128
 #[derive(
+  Copy,
+  Clone,
   FromSqlRow,
   AsExpression,
   serde::Serialize,
@@ -67,7 +69,11 @@ impl FromSql<Text, Pg> for U128 {
 //   }
 // }
 
+// https://vasilakisfil.social/blog/2020/05/09/rust-diesel-jsonb/
+
 #[derive(
+  Copy,
+  Clone,
   FromSqlRow,
   AsExpression,
   serde::Serialize,
@@ -79,23 +85,37 @@ impl FromSql<Text, Pg> for U128 {
   PartialOrd,
 )]
 #[diesel(sql_type = Jsonb)]
-pub struct MintEntryType {}
+pub struct MintEntryType {
+  pub deadline: Option<i64>, // unix timestamp
+  pub end: Option<i64>,      // block height
+  pub limit: Option<U128>,   // claim amou
+}
 
 impl ToSql<Jsonb, Pg> for MintEntryType {
-  fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> diesel::serialize::Result {
-    todo!()
+  fn to_sql(&self, out: &mut Output<Pg>) -> diesel::serialize::Result {
+    let value = serde_json::to_value(self)?;
+    // <serde_json::Value as ToSql<Jsonb, Pg>>::to_sql(&value, out)
+    out.write_all(&[1])?;
+    serde_json::to_writer(out, &value)
+      .map(|_| IsNull::No)
+      .map_err(Into::into)
   }
 }
 impl FromSql<Jsonb, Pg> for MintEntryType {
   fn from_sql(
     bytes: <Pg as diesel::backend::Backend>::RawValue<'_>,
   ) -> diesel::deserialize::Result<Self> {
-    todo!()
+    let value = <serde_json::Value as FromSql<Jsonb, Pg>>::from_sql(bytes)?;
+    Ok(serde_json::from_value(value)?)
   }
 }
 impl From<&MintEntry> for MintEntryType {
   fn from(value: &MintEntry) -> Self {
-    todo!()
+    MintEntryType {
+      deadline: value.deadline.map(|v| v as i64),
+      end: value.end.map(|v| v as i64),
+      limit: value.limit.map(|v| U128(v)),
+    }
   }
 }
 //Transaction
@@ -176,7 +196,7 @@ pub struct TxRuneEntry {
   pub burned: u128,
   pub divisibility: i16,
   pub etching: String,
-  pub mint_entry: Option<MintEntryType>,
+  pub mint_entry: MintEntryType,
   pub mints: i64,
   pub number: i64,
   pub rune: U128,
@@ -197,7 +217,7 @@ pub struct NewTxRuneEntry<'a> {
   pub burned: U128,
   pub divisibility: i16,
   pub etching: &'a str,
-  pub mint_entry: Option<MintEntryType>,
+  pub mint_entry: MintEntryType,
   pub mints: i64,
   pub number: i64,
   pub rune: U128,

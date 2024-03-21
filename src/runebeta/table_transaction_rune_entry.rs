@@ -35,7 +35,10 @@ impl<'conn> TransactionRuneEntryTable {
       supply: U128(rune_entry.supply),
       symbol: symbol_value.as_ref().map(|c| c.as_str()),
       timestamp: rune_entry.timestamp as i32,
-      mint_entry: rune_entry.mint.map(|entry| MintEntryType::from(&entry)),
+      mint_entry: rune_entry
+        .mint
+        .map(|entry| MintEntryType::from(&entry))
+        .unwrap_or_default(),
     };
     diesel::insert_into(transaction_rune_entries::table())
       .values(tx_rune_entry)

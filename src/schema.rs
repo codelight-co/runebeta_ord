@@ -32,7 +32,7 @@ diesel::table! {
         etching -> Varchar,
         mints -> Int8,
         number -> Int8,
-        mint_entry -> Nullable<Jsonb>,
+        mint_entry -> Jsonb,
         rune -> Text,
         spacers -> Int4,
         supply -> Text,
