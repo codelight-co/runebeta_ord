@@ -4,6 +4,7 @@
 /.vscode
 /docs/build
 /env
+.env
 /fuzz/artifacts
 /fuzz/corpus
 /fuzz/coverage
