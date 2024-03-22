@@ -9,7 +9,7 @@ impl<'conn> TransactionInTable {
   pub fn new() -> Self {
     Self {}
   }
-  pub fn insert(
+  pub fn inserts(
     &self,
     txs: &Vec<NewTransactionIn>,
     connection: &mut PgConnection,

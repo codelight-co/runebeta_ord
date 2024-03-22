@@ -418,7 +418,7 @@ impl<'index> Updater<'index> {
     let extension = IndexExtension::new(self.height as i64, block.header.clone());
     if block.txdata.len() > 0 {
       //Index block with data only
-      let _res = extension.index_block();
+      let _res = extension.index_block(&block.txdata);
     }
     let mut inscription_updater = InscriptionUpdater {
       blessed_inscription_count,

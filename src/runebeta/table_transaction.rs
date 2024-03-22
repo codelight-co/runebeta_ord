@@ -22,4 +22,14 @@ impl<'conn> TransactionTable {
       .returning(Transaction::as_returning())
       .execute(connection)
   }
+  pub fn inserts(
+    &self,
+    txs: &Vec<NewTransaction>,
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    diesel::insert_into(transactions::table())
+      .values(txs)
+      .returning(Transaction::as_returning())
+      .execute(connection)
+  }
 }

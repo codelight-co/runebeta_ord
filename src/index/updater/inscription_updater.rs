@@ -243,10 +243,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         .transaction_id_to_transaction
         .insert(&txid.store(), self.transaction_buffer.as_slice())?;
       self.transaction_buffer.clear();
-
-      if let Some(extension) = &self.extension {
-        let _ = extension.index_transaction(&txid, tx);
-      }
     }
 
     let potential_parents = floating_inscriptions
