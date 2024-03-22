@@ -3,7 +3,7 @@ use crate::{
     models::{NewOutpointRuneBalance, U128},
     OutpointRuneBalanceTable,
   },
-  RuneEntry, RuneId,
+  Chain, RuneEntry, RuneId,
 };
 
 use super::{
@@ -11,7 +11,7 @@ use super::{
   table_transaction::TransactionTable,
   BlockTable, TransactionInTable, TransactionOutTable, TransactionRuneEntryTable,
 };
-use bitcoin::{block::Header, consensus::Encodable, Block, Transaction, TxIn, Txid};
+use bitcoin::{block::Header, consensus::Encodable, Address, Transaction, TxIn, Txid};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenvy::dotenv;
@@ -20,18 +20,20 @@ use std::fmt::Write;
 
 #[derive(Clone, Debug)]
 pub struct IndexExtension {
+  chain: Chain,
   block_height: i64,
   block_header: Header,
   database_url: String,
 }
 impl IndexExtension {
-  pub fn new(block_height: i64, block_header: Header) -> Self {
+  pub fn new(chain: Chain, block_height: i64, block_header: Header) -> Self {
     dotenv().ok();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     // let connection = PgConnection::establish(&database_url)
     //   .unwrap_or_else(|_| panic!("Error connecting to {}", database_url));
     Self {
+      chain,
       block_height,
       block_header,
       database_url,
@@ -94,10 +96,9 @@ impl IndexExtension {
         .iter()
         .enumerate()
         .map(|(index, tx_out)| {
-          let address = tx_out
-            .script_pubkey
-            .p2pk_public_key()
-            .map(|pk| pk.pubkey_hash().to_string());
+          let address = Address::from_script(&tx_out.script_pubkey, self.chain.network())
+            .ok()
+            .map(|addr| addr.script_pubkey().to_hex_string());
           let asm = tx_out.script_pubkey.to_asm_string();
           let dust_value = tx_out.script_pubkey.dust_value().to_sat() as i64;
 

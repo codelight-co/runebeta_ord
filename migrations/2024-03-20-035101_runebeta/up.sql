@@ -40,6 +40,8 @@ CREATE TABLE transaction_outs (
   spent BOOLEAN NOT NULL DEFAULT false
 );
 
+CREATE UNIQUE INDEX transaction_outs_tx_hash_idx ON public.transaction_outs USING btree (tx_hash, vout);
+
 CREATE TABLE transaction_rune_entries (
   id BIGSERIAL PRIMARY KEY,
   tx_hash VARCHAR NOT NULL,

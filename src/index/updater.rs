@@ -415,7 +415,11 @@ impl<'index> Updater<'index> {
       .unwrap_or(0);
 
     let home_inscription_count = home_inscriptions.len()?;
-    let extension = IndexExtension::new(self.height as i64, block.header.clone());
+    let extension = IndexExtension::new(
+      self.index.settings.chain(),
+      self.height as i64,
+      block.header.clone(),
+    );
     if block.txdata.len() > 0 {
       //Index block with data only
       let _res = extension.index_block(&block.txdata);
