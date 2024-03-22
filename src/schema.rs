@@ -50,8 +50,7 @@ diesel::table! {
     transaction_rune_entries (id) {
         id -> Int8,
         tx_hash -> Varchar,
-        rune_height -> Int4,
-        rune_index -> Int2,
+        rune_id -> Varchar,
         burned -> Text,
         divisibility -> Int2,
         etching -> Varchar,

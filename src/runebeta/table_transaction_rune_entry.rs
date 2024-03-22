@@ -15,7 +15,7 @@ impl<'conn> TransactionRuneEntryTable {
   pub fn create(
     &self,
     txid: &Txid,
-    rune_id: &RuneId,
+    rune_id_value: &RuneId,
     rune_entry: &RuneEntry,
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {
@@ -23,8 +23,9 @@ impl<'conn> TransactionRuneEntryTable {
     let symbol_value = rune_entry.symbol.map(|c| c.to_string());
     let tx_rune_entry = NewTxRuneEntry {
       tx_hash: txid.to_string(),
-      rune_height: rune_id.block as i32,
-      rune_index: rune_id.tx as i16,
+      // rune_height: rune_id.block as i32,
+      // rune_index: rune_id.tx as i16,
+      rune_id: rune_id_value.to_string(),
       burned: U128(rune_entry.burned),
       divisibility: rune_entry.divisibility as i16,
       etching: etching_value.as_str(),

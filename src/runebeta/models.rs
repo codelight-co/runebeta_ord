@@ -225,8 +225,9 @@ pub struct NewTransactionOut {
 pub struct TxRuneEntry {
   pub id: i64,
   pub tx_hash: String,
-  pub rune_height: i32,
-  pub rune_index: i16,
+  // pub rune_height: i32,
+  // pub rune_index: i16,
+  pub rune_id: String,
   #[diesel(deserialize_as = U128)]
   pub burned: u128,
   pub divisibility: i16,
@@ -246,8 +247,9 @@ pub struct TxRuneEntry {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTxRuneEntry<'a> {
   pub tx_hash: String,
-  pub rune_height: i32,
-  pub rune_index: i16,
+  // pub rune_height: i32,
+  // pub rune_index: i16,
+  pub rune_id: String,
   #[diesel(serialize_as = U128)]
   pub burned: U128,
   pub divisibility: i16,

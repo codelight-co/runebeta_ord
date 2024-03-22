@@ -235,12 +235,6 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         id_counter += 1;
       }
     }
-    log::info!(
-      "Index transaction {}, inscriptions {}, {:?}",
-      &self.index_transactions,
-      &inscriptions,
-      &self.extension
-    );
     if self.index_transactions && inscriptions {
       tx.consensus_encode(&mut self.transaction_buffer)
         .expect("in-memory writers don't error");

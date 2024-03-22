@@ -44,8 +44,9 @@ CREATE TABLE transaction_rune_entries (
   id BIGSERIAL PRIMARY KEY,
   tx_hash VARCHAR NOT NULL,
   --RuneId
-  rune_height INTEGER NOT NULL,
-  rune_index SMALLINT NOT NULL DEFAULT 0,
+  -- rune_height INTEGER NOT NULL,
+  -- rune_index SMALLINT NOT NULL DEFAULT 0,
+  rune_id VARCHAR NOT NULL,
   --End RuneId
   burned TEXT NOT NULL,
   divisibility SMALLINT NOT NULL,
