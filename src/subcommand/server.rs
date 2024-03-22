@@ -46,8 +46,8 @@ mod accept_encoding;
 mod accept_json;
 mod error;
 pub(crate) mod query;
+mod runebeta;
 mod server_config;
-
 enum SpawnConfig {
   Https(AxumAcceptor),
   Http,
@@ -261,6 +261,7 @@ impl Server {
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
         .route("/update", get(Self::update))
+        .nest("/runebeta", self::runebeta::RunebetaServer::create_router())
         .fallback(Self::fallback)
         .layer(Extension(index))
         .layer(Extension(server_config.clone()))

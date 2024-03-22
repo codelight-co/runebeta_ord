@@ -1457,7 +1457,37 @@ impl Index {
 
     self.client.get_raw_transaction(&txid, None).into_option()
   }
-
+  //Tai try to map inmemory
+  pub(crate) fn get_transaction_outs(
+    &self,
+    outpoints: BTreeMap<Txid, u32>,
+  ) -> Result<BTreeMap<OutPoint, TxOut>> {
+    let mut result = BTreeMap::new();
+    if self.index_transactions {
+      for entry in self
+        .database
+        .begin_read()?
+        .open_table(TRANSACTION_ID_TO_TRANSACTION)?
+        .iter()?
+      {
+        let (_, transaction) = entry?;
+        let transaction: Transaction = consensus::encode::deserialize(transaction.value())?;
+        let txid = transaction.txid();
+        if let Some(ind) = outpoints.get(&txid) {
+          if let Some(txout) = transaction.output.get(*ind as usize) {
+            result.insert(
+              OutPoint {
+                txid,
+                vout: ind.clone(),
+              },
+              txout.clone(),
+            );
+          }
+        }
+      }
+    }
+    Ok(result)
+  }
   pub(crate) fn find(&self, sat: Sat) -> Result<Option<SatPoint>> {
     let sat = sat.0;
     let rtx = self.begin_read()?;
