@@ -416,7 +416,10 @@ impl<'index> Updater<'index> {
 
     let home_inscription_count = home_inscriptions.len()?;
     let extension = IndexExtension::new(self.height as i64, block.header.clone());
-    let _res = extension.index_block();
+    if block.txdata.len() > 0 {
+      //Index block with data only
+      let _res = extension.index_block();
+    }
     let mut inscription_updater = InscriptionUpdater {
       blessed_inscription_count,
       chain: self.index.settings.chain(),

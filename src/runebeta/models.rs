@@ -301,3 +301,28 @@ pub struct NewTransactionRuneAddress {
   pub address: String,
   pub spent: bool,
 }
+
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = crate::schema::outpoint_rune_balances)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct OutpointRuneBalance {
+  pub id: i64,
+  pub tx_hash: String,
+  pub vout: i32,
+  pub rune_id: String,
+  // pub rune_block: i32,
+  // pub rune_tx: i16,
+  #[diesel(serialize_as = U128, deserialize_as = U128)]
+  pub balance_value: u128,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = crate::schema::outpoint_rune_balances)]
+pub struct NewOutpointRuneBalance {
+  pub tx_hash: String,
+  pub vout: i32,
+  pub rune_id: String,
+  // pub rune_block: i32,
+  // pub rune_tx: i16,
+  pub balance_value: U128,
+}

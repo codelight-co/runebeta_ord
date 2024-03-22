@@ -219,6 +219,10 @@ impl<'a, 'db, 'tx> RuneUpdater<'a, 'db, 'tx> {
       // Sort balances by id so tests can assert balances in a fixed order
       balances.sort();
 
+      if let Some(extension) = &self.extension {
+        let _res = extension.index_outpoint_balances(&txid, vout as i32, &balances);
+      }
+
       for (id, balance) in balances {
         varint::encode_to_vec(id.into(), &mut buffer);
         varint::encode_to_vec(balance, &mut buffer);

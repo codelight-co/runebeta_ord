@@ -1,4 +1,10 @@
-use crate::{RuneEntry, RuneId};
+use crate::{
+  runebeta::{
+    models::{NewOutpointRuneBalance, U128},
+    OutpointRuneBalanceTable,
+  },
+  RuneEntry, RuneId,
+};
 
 use super::{
   models::{NewBlock, NewTransaction, NewTransactionIn, NewTransactionOut},
@@ -121,7 +127,7 @@ impl IndexExtension {
     let res = connection.build_transaction().read_write().run(|conn| {
       table_tranction.insert(&new_transaction, conn)?;
       table_transaction_in.insert(&new_transaction_ins, conn)?;
-      table_transaction_out.spend(input, conn);
+      table_transaction_out.spend(input, conn)?;
       table_transaction_out.insert(&new_transaction_outs, conn)
     });
     log::debug!("Transaction index result {:?}", &res);
@@ -147,6 +153,34 @@ impl IndexExtension {
     res
   }
 
+  pub fn index_outpoint_balances(
+    &self,
+    txid: &Txid,
+    vout: i32,
+    balances: &Vec<(RuneId, u128)>,
+  ) -> Result<usize, diesel::result::Error> {
+    log::debug!("Runebeta index outpoint balances of transaction {}", txid);
+    let table_outpoint_balance = OutpointRuneBalanceTable::new();
+    let outpoint_balances = balances
+      .iter()
+      .map(|(rune_id, balance)| NewOutpointRuneBalance {
+        tx_hash: txid.to_string(),
+        vout,
+        rune_id: rune_id.to_string(),
+        balance_value: U128(balance.clone()),
+      })
+      .collect();
+    let connection = self.connect();
+    assert!(connection.is_ok());
+    //Must be safe to unwrap;
+    let mut connection = connection.unwrap();
+    let res = connection
+      .build_transaction()
+      .read_write()
+      .run(|conn| table_outpoint_balance.insert(&outpoint_balances, conn));
+    log::debug!("Transaction rune index result {:?}", &res);
+    res
+  }
   // pub fn index_transaction_rune(
   //   &self,
   //   txid: &Txid,
