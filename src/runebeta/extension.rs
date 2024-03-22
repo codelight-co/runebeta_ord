@@ -96,9 +96,9 @@ impl IndexExtension {
         .iter()
         .enumerate()
         .map(|(index, tx_out)| {
-          let address = Address::from_script(&tx_out.script_pubkey, self.chain.network())
-            .ok()
-            .map(|addr| addr.script_pubkey().to_hex_string());
+          let address = Address::from_script(&tx_out.script_pubkey, self.chain.network()).ok();
+          let address = address.map(|addr| addr.to_string());
+
           let asm = tx_out.script_pubkey.to_asm_string();
           let dust_value = tx_out.script_pubkey.dust_value().to_sat() as i64;
 

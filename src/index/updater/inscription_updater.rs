@@ -67,7 +67,6 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   pub(super) unbound_inscriptions: u64,
   pub(super) value_cache: &'a mut HashMap<OutPoint, u64>,
   pub(super) value_receiver: &'a mut Receiver<u64>,
-  pub(super) extension: Option<IndexExtension>,
 }
 
 impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {

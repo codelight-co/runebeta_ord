@@ -452,7 +452,6 @@ impl<'index> Updater<'index> {
       unbound_inscriptions,
       value_cache,
       value_receiver,
-      extension: Some(extension.clone()),
     };
 
     if self.index.index_sats {
