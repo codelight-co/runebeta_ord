@@ -56,7 +56,9 @@ impl IndexExtension {
       .build_transaction()
       .read_write()
       .run(|conn| table_block.insert(&new_block, conn));
-    log::debug!("Block index result {:?}", &res);
+    if res.is_err() {
+      log::debug!("Block index result {:?}", &res);
+    }
     res
   }
   pub fn index_transaction(
@@ -130,7 +132,9 @@ impl IndexExtension {
       table_transaction_out.spend(input, conn)?;
       table_transaction_out.insert(&new_transaction_outs, conn)
     });
-    log::debug!("Transaction index result {:?}", &res);
+    if res.is_err() {
+      log::debug!("Transaction index result {:?}", &res);
+    }
     res
   }
   pub fn index_transaction_rune_entry(
@@ -178,26 +182,9 @@ impl IndexExtension {
       .build_transaction()
       .read_write()
       .run(|conn| table_outpoint_balance.insert(&outpoint_balances, conn));
-    log::debug!("Transaction rune index result {:?}", &res);
+    if res.is_err() {
+      log::debug!("Transaction rune index result {:?}", &res);
+    }
     res
   }
-  // pub fn index_transaction_rune(
-  //   &self,
-  //   txid: &Txid,
-  //   rune_id: &RuneId,
-  //   rune_entry: &RuneEntry,
-  // ) -> Result<usize, diesel::result::Error> {
-  //   log::debug!("Runebeta index transaction rune {}, rune {}", txid, rune_id);
-  //   let table_tranction_rune = ::new();
-  //   let connection = self.connect();
-  //   assert!(connection.is_ok());
-  //   //Must be safe to unwrap;
-  //   let mut connection = connection.unwrap();
-  //   let res = connection
-  //     .build_transaction()
-  //     .read_write()
-  //     .run(|conn| table_tranction_rune.create(txid, rune_id, rune_entry, conn));
-  //   log::debug!("Transaction rune index result {:?}", &res);
-  //   res
-  // }
 }
