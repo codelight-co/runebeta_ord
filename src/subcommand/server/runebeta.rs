@@ -1,7 +1,7 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 use axum::{extract::Path, response::IntoResponse, routing::get, Extension, Json, Router};
-use bitcoin::{Address, OutPoint, Txid};
+use bitcoin::{OutPoint, Txid};
 use tokio::task;
 
 use crate::{
@@ -18,13 +18,14 @@ impl RunebetaServer {
   }
   async fn runes_balances(
     Extension(server_config): Extension<Arc<ServerConfig>>,
-    Extension(settings): Extension<Arc<Settings>>,
+    Extension(_settings): Extension<Arc<Settings>>,
     Extension(index): Extension<Arc<Index>>,
     Path(address): Path<String>,
     AcceptJson(accept_json): AcceptJson,
   ) -> ServerResult {
     task::block_in_place(|| {
       //Get all transaction
+      let mut now = Instant::now();
       let balances = index.get_rune_balance_map()?;
       let mut outpoints = BTreeMap::<Txid, u32>::new();
       balances.iter().for_each(|(_, balances)| {
@@ -32,20 +33,16 @@ impl RunebetaServer {
           outpoints.insert(outpoint.txid.clone(), outpoint.vout);
         })
       });
-      let mut tx_outs = index.get_transaction_outs(outpoints)?;
-      //Filter by address
-      tx_outs = tx_outs
-        .into_iter()
-        .filter(|(_, txout)| {
-          if let Ok(addr) =
-            Address::from_script(txout.script_pubkey.as_script(), settings.chain().network())
-          {
-            addr.to_string() == address.as_str()
-          } else {
-            false
-          }
-        })
-        .collect();
+      log::info!(
+        "get_rune_balance finished in {}ms",
+        now.elapsed().as_millis()
+      );
+      now = Instant::now();
+      let tx_outs = index.get_transaction_outs(outpoints, address.as_str())?;
+      log::info!(
+        "filter transaction outs finished in {}ms",
+        now.elapsed().as_millis()
+      );
       Ok(if accept_json {
         Json(
           balances

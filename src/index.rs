@@ -1461,27 +1461,49 @@ impl Index {
   pub(crate) fn get_transaction_outs(
     &self,
     outpoints: BTreeMap<Txid, u32>,
+    address: &str,
   ) -> Result<BTreeMap<OutPoint, TxOut>> {
     let mut result = BTreeMap::new();
     if self.index_transactions {
+      let now = Instant::now();
+      log::info!("Start get_transaction_outs for address {}", address);
+      let mut counter = 0;
       for entry in self
         .database
         .begin_read()?
         .open_table(TRANSACTION_ID_TO_TRANSACTION)?
         .iter()?
       {
+        counter = counter + 1;
+        if counter % 1000 == 0 {
+          log::info!(
+            "Interate to {}th index in {}ms",
+            counter,
+            now.elapsed().as_millis()
+          );
+        }
+
         let (_, transaction) = entry?;
         let transaction: Transaction = consensus::encode::deserialize(transaction.value())?;
         let txid = transaction.txid();
         if let Some(ind) = outpoints.get(&txid) {
+          log::info!("Transaction matched at {}th index with id {}", ind, &txid);
           if let Some(txout) = transaction.output.get(*ind as usize) {
-            result.insert(
-              OutPoint {
-                txid,
-                vout: ind.clone(),
-              },
-              txout.clone(),
-            );
+            if let Ok(addr) = Address::from_script(
+              txout.script_pubkey.as_script(),
+              self.settings.chain().network(),
+            ) {
+              log::info!("Transaction out address {}", &addr);
+              if addr.to_string() == address {
+                result.insert(
+                  OutPoint {
+                    txid,
+                    vout: ind.clone(),
+                  },
+                  txout.clone(),
+                );
+              }
+            }
           }
         }
       }
