@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  ord_runebeta:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: ord_runebeta
+    container_name: ord_runebeta
+    restart: always
+    volumes:
+      - ${ORD_INDEX_DIR}:/opt/data
+      - ./run.sh:/opt/run.sh
+      - ../ord_testnet.log:/opt/ord.log
+    working_dir: /opt
+    command: /opt/run.sh testnet
+    env_file:
+      - ./.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  
+    ports:
+      - "18088:8088"
+    tty: true
