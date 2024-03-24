@@ -1,20 +1,23 @@
-use std::{collections::BTreeMap, sync::Arc, time::Instant};
-
 use axum::{extract::Path, response::IntoResponse, routing::get, Extension, Json, Router};
+use bitcoin::{Address, ScriptBuf, TxOut};
 use bitcoin::{OutPoint, Txid};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 use tokio::task;
 
 use crate::{
   settings::Settings,
-  templates::{PageContent, RuneBalancesHtml},
+  subcommand::server::error::OptionExt,
+  templates::{OutputHtml, PageContent, RuneBalancesHtml},
   Index, Rune,
 };
 
-use super::{accept_json::AcceptJson, error::ServerResult, server::ServerConfig};
+use super::*;
 pub struct RunebetaServer {}
 impl RunebetaServer {
   pub fn create_router() -> Router<Arc<ServerConfig>> {
-    Router::new().route("/runes/balances/:address", get(Self::runes_balances))
+    Router::new()
+      .route("/runes/balances/:address", get(Self::runes_balances))
+      .route("/output/:output", get(Self::output))
   }
   async fn runes_balances(
     Extension(server_config): Extension<Arc<ServerConfig>>,
@@ -24,7 +27,7 @@ impl RunebetaServer {
     AcceptJson(accept_json): AcceptJson,
   ) -> ServerResult {
     task::block_in_place(|| {
-      //Get all transaction
+      log::info!("Start get runes balances by address");
       let mut now = Instant::now();
       let balances = index.get_rune_balance_map()?;
       let mut outpoints = BTreeMap::<Txid, u32>::new();
@@ -64,6 +67,89 @@ impl RunebetaServer {
         RuneBalancesHtml { balances }
           .page(server_config)
           .into_response()
+      })
+    })
+  }
+
+  async fn output(
+    Extension(server_config): Extension<Arc<ServerConfig>>,
+    Extension(settings): Extension<Arc<Settings>>,
+    Extension(index): Extension<Arc<Index>>,
+    Path(outpoint): Path<OutPoint>,
+    AcceptJson(accept_json): AcceptJson,
+  ) -> ServerResult {
+    task::block_in_place(|| {
+      let sat_ranges = index.list(outpoint)?;
+
+      let indexed;
+
+      let output = if outpoint == OutPoint::null() || outpoint == unbound_outpoint() {
+        let mut value = 0;
+
+        if let Some(ranges) = &sat_ranges {
+          for (start, end) in ranges {
+            value += end - start;
+          }
+        }
+
+        indexed = true;
+
+        TxOut {
+          value,
+          script_pubkey: ScriptBuf::new(),
+        }
+      } else {
+        indexed = index.contains_output(&outpoint)?;
+
+        index
+          .get_transaction(outpoint.txid)?
+          .ok_or_not_found(|| format!("output {outpoint}"))?
+          .output
+          .into_iter()
+          .nth(outpoint.vout as usize)
+          .ok_or_not_found(|| format!("output {outpoint}"))?
+      };
+      if let Ok(address) =
+        Address::from_script(output.script_pubkey.as_script(), settings.chain().network())
+      {
+        log::info!(
+          "Address {}, address.to_string(): {}",
+          &address,
+          address.to_string()
+        );
+      } else {
+        log::info!("Cannot parse address from txout {:?}", &output);
+      }
+      let inscriptions = index.get_inscriptions_on_output(outpoint)?;
+
+      let runes = index.get_rune_balances_for_outpoint(outpoint)?;
+
+      let spent = index.is_output_spent(outpoint)?;
+
+      Ok(if accept_json {
+        Json(api::Output::new(
+          server_config.chain,
+          inscriptions,
+          outpoint,
+          output,
+          indexed,
+          runes,
+          sat_ranges,
+          spent,
+        ))
+        .into_response()
+      } else {
+        OutputHtml {
+          chain: server_config.chain,
+          inscriptions,
+          outpoint,
+          output,
+          runes,
+          sat_ranges,
+          spent,
+        }
+        .page(server_config)
+        .into_response()
       })
     })
   }
