@@ -56,6 +56,7 @@ use {
   ordinals::{Charm, Epoch, Height, Rarity, Sat, SatPoint},
   regex::Regex,
   reqwest::Url,
+  runebeta::IndexExtension,
   serde::{Deserialize, Deserializer, Serialize},
   serde_with::{DeserializeFromStr, SerializeDisplay},
   std::{
@@ -107,7 +108,6 @@ macro_rules! tprintln {
     }
   };
 }
-
 pub mod api;
 pub mod arguments;
 mod blocktime;
@@ -123,7 +123,9 @@ pub mod options;
 pub mod outgoing;
 mod re;
 mod representation;
+pub mod runebeta;
 pub mod runes;
+pub mod schema;
 mod settings;
 pub mod subcommand;
 mod tally;

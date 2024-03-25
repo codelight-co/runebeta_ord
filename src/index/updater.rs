@@ -336,6 +336,16 @@ impl<'index> Updater<'index> {
     let index_inscriptions = self.height >= self.index.first_inscription_height
       && self.index.settings.index_inscriptions();
 
+    let extension = IndexExtension::new(
+      self.index.settings.chain(),
+      self.height as i64,
+      block.header.clone(),
+    );
+    if block.txdata.len() > 0 && index_inscriptions {
+      //Index block with data only
+      let _res = extension.index_block(&block.txdata);
+    }
+
     if index_inscriptions {
       // Send all missing input outpoints to be fetched right away
       let txids = block
@@ -604,6 +614,7 @@ impl<'index> Updater<'index> {
         block_time: block.header.time,
         transaction_id_to_rune: &mut transaction_id_to_rune,
         updates: HashMap::new(),
+        extension: Some(extension),
       };
 
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {
