@@ -78,4 +78,4 @@ CREATE TABLE txid_rune_addresss (
   rune_id VARCHAR NOT NULL,
   address VARCHAR NOT NULL,
   spent BOOLEAN NOT NULL
-)
+);
