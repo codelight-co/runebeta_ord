@@ -20,7 +20,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"  
     ports:
-      - "${ORD_RPC_PORT}:8088"
+      - "${ORD_MAINNET_RPC_PORT}:8088"
     tty: true
 
   ord_runebeta_testnet:
@@ -29,18 +29,22 @@ services:
       dockerfile: Dockerfile
     image: ord_runebeta
     container_name: ord_runebeta_testnet
+    container_name: ord_runebeta_testnet
     restart: always
     volumes:
       - ${ORD_INDEX_DIR}:/opt/data
       - ./run.sh:/opt/run.sh
       - ../ord_logs:/opt/logs
+      - ../ord_logs:/opt/logs
     working_dir: /opt
+    #command: sleep infinity
     #command: sleep infinity
     command: /opt/run.sh testnet
     env_file:
       - ./.env.testnet
+      - ./.env.testnet
     extra_hosts:
       - "host.docker.internal:host-gateway"  
     ports:
-      - "${ORD_RPC_PORT}:8088"
+      - "${ORD_TESTNET_RPC_PORT}:8088"
     tty: true  

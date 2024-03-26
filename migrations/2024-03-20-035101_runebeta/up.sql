@@ -60,6 +60,8 @@ CREATE TABLE transaction_rune_entries (
   --U128
   rune TEXT NOT NULL,
   spacers INTEGER NOT NULL,
+  premine BIGINT NOT NULL DEFAULT 0,
+  spaced_rune VARCHAR NOT NULL DEFAULT "",
   --U128
   supply TEXT NOT NULL,
   symbol CHAR NULL,

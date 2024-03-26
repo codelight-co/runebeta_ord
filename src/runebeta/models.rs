@@ -86,9 +86,12 @@ impl FromSql<Text, Pg> for U128 {
 )]
 #[diesel(sql_type = Jsonb)]
 pub struct MintEntryType {
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub deadline: Option<i64>, // unix timestamp
-  pub end: Option<i64>,      // block height
-  pub limit: Option<U128>,   // claim amou
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub end: Option<i64>, // block height
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub limit: Option<U128>, // claim amou
 }
 
 impl ToSql<Jsonb, Pg> for MintEntryType {
@@ -237,6 +240,8 @@ pub struct TxRuneEntry {
   pub number: i64,
   pub rune: U128,
   pub spacers: i32,
+  pub premine: i64,
+  pub spaced_rune: String,
   pub supply: U128,
   pub symbol: Option<String>,
   pub timestamp: i32,
@@ -259,6 +264,8 @@ pub struct NewTxRuneEntry<'a> {
   pub number: i64,
   pub rune: U128,
   pub spacers: i32,
+  pub premine: i64,
+  pub spaced_rune: String,
   pub supply: U128,
   pub symbol: Option<&'a str>,
   pub timestamp: i32,

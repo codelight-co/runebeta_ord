@@ -33,6 +33,8 @@ impl<'conn> TransactionRuneEntryTable {
       number: rune_entry.number as i64,
       rune: U128(rune_entry.spaced_rune.rune.0),
       spacers: rune_entry.spaced_rune.spacers as i32,
+      premine: rune_entry.premine as i64,
+      spaced_rune: rune_entry.spaced_rune.to_string(),
       supply: U128(rune_entry.supply),
       symbol: symbol_value.as_ref().map(|c| c.as_str()),
       timestamp: rune_entry.timestamp as i32,

@@ -59,6 +59,8 @@ diesel::table! {
         mint_entry -> Jsonb,
         rune -> Text,
         spacers -> Int4,
+        premine -> Int8,
+        spaced_rune -> Varchar,
         supply -> Text,
         #[max_length = 1]
         symbol -> Nullable<Bpchar>,
