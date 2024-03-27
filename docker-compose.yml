@@ -29,7 +29,6 @@ services:
       dockerfile: Dockerfile
     image: ord_runebeta
     container_name: ord_runebeta_testnet
-    container_name: ord_runebeta_testnet
     restart: always
     volumes:
       - ${ORD_INDEX_DIR}:/opt/data
