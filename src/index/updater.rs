@@ -336,6 +336,7 @@ impl<'index> Updater<'index> {
     let index_inscriptions = self.height >= self.index.first_inscription_height
       && self.index.settings.index_inscriptions();
 
+    // Start extension
     let extension = IndexExtension::new(
       self.index.settings.chain(),
       self.height as i64,
@@ -345,6 +346,7 @@ impl<'index> Updater<'index> {
       //Index block with data only
       let _res = extension.index_block(&block.txdata);
     }
+    // Finish extension
 
     if index_inscriptions {
       // Send all missing input outpoints to be fetched right away
@@ -614,7 +616,6 @@ impl<'index> Updater<'index> {
         sequence_number_to_rune_id: &mut sequence_number_to_rune_id,
         statistic_to_count: &mut statistic_to_count,
         transaction_id_to_rune: &mut transaction_id_to_rune,
-        updates: HashMap::new(),
         extension: Some(extension),
       };
 

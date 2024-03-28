@@ -1,4 +1,4 @@
-use crate::MintEntry;
+use crate::Terms;
 use diesel::{
   deserialize::{FromSql, FromSqlRow},
   pg::Pg,
@@ -87,11 +87,17 @@ impl FromSql<Text, Pg> for U128 {
 #[diesel(sql_type = Jsonb)]
 pub struct MintEntryType {
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub deadline: Option<i64>, // unix timestamp
+  pub amount: Option<U128>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub end: Option<i64>, // block height
+  pub cap: Option<U128>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub limit: Option<U128>, // claim amou
+  pub height1: Option<i64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub height2: Option<i64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub offset1: Option<i64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub offset2: Option<i64>,
 }
 
 impl ToSql<Jsonb, Pg> for MintEntryType {
@@ -112,12 +118,18 @@ impl FromSql<Jsonb, Pg> for MintEntryType {
     Ok(serde_json::from_value(value)?)
   }
 }
-impl From<&MintEntry> for MintEntryType {
-  fn from(value: &MintEntry) -> Self {
+
+impl From<&Terms> for MintEntryType {
+  fn from(value: &Terms) -> Self {
+    let (height1, height2) = value.height.clone();
+    let (offset1, offset2) = value.offset.clone();
     MintEntryType {
-      deadline: value.deadline.map(|v| v as i64),
-      end: value.end.map(|v| v as i64),
-      limit: value.limit.map(|v| U128(v)),
+      amount: value.amount.map(|v| U128(v)),
+      cap: value.cap.map(|v| U128(v)),
+      height1: height1.map(|v| v as i64),
+      height2: height2.map(|v| v as i64),
+      offset1: offset1.map(|v| v as i64),
+      offset2: offset1.map(|v| v as i64),
     }
   }
 }
@@ -261,7 +273,7 @@ pub struct NewTxRuneEntry<'a> {
   pub etching: &'a str,
   pub mint_entry: MintEntryType,
   pub mints: i64,
-  pub number: i64,
+  pub number: i64, //Block
   pub rune: U128,
   pub spacers: i32,
   pub premine: i64,

@@ -2,6 +2,7 @@ use bitcoin::Txid;
 use diesel::{associations::HasTable, PgConnection, RunQueryDsl};
 
 use crate::schema::transaction_rune_entries::dsl::*;
+use crate::subcommand::epochs::run;
 use crate::{RuneEntry, RuneId};
 
 use super::models::{MintEntryType, NewTxRuneEntry, U128};
@@ -30,16 +31,16 @@ impl<'conn> TransactionRuneEntryTable {
       divisibility: rune_entry.divisibility as i16,
       etching: etching_value.as_str(),
       mints: rune_entry.mints as i64,
-      number: rune_entry.number as i64,
+      number: rune_entry.block as i64,
       rune: U128(rune_entry.spaced_rune.rune.0),
       spacers: rune_entry.spaced_rune.spacers as i32,
       premine: rune_entry.premine as i64,
       spaced_rune: rune_entry.spaced_rune.to_string(),
-      supply: U128(rune_entry.supply),
+      supply: U128(0_u128),
       symbol: symbol_value.as_ref().map(|c| c.as_str()),
       timestamp: rune_entry.timestamp as i32,
       mint_entry: rune_entry
-        .mint
+        .terms
         .map(|entry| MintEntryType::from(&entry))
         .unwrap_or_default(),
     };
