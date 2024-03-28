@@ -2,7 +2,6 @@ use bitcoin::Txid;
 use diesel::{associations::HasTable, PgConnection, RunQueryDsl};
 
 use crate::schema::transaction_rune_entries::dsl::*;
-use crate::subcommand::epochs::run;
 use crate::{RuneEntry, RuneId};
 
 use super::models::{MintEntryType, NewTxRuneEntry, U128};

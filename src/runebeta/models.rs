@@ -129,7 +129,7 @@ impl From<&Terms> for MintEntryType {
       height1: height1.map(|v| v as i64),
       height2: height2.map(|v| v as i64),
       offset1: offset1.map(|v| v as i64),
-      offset2: offset1.map(|v| v as i64),
+      offset2: offset2.map(|v| v as i64),
     }
   }
 }
