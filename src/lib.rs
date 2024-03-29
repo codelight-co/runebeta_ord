@@ -25,7 +25,6 @@ use {
     },
     into_usize::IntoUsize,
     representation::Representation,
-    runes::Terms,
     settings::Settings,
     subcommand::{Subcommand, SubcommandResult},
     tally::Tally,
@@ -41,10 +40,8 @@ use {
     consensus::{self, Decodable, Encodable},
     hash_types::{BlockHash, TxMerkleNode},
     hashes::Hash,
-    opcodes,
-    script::{self, Instruction},
-    Amount, Block, Network, OutPoint, Script, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
-    Witness,
+    script, Amount, Block, Network, OutPoint, Script, ScriptBuf, Sequence, Transaction, TxIn,
+    TxOut, Txid, Witness,
   },
   bitcoincore_rpc::{Client, RpcApi},
   chrono::{DateTime, TimeZone, Utc},
@@ -53,10 +50,12 @@ use {
   html_escaper::{Escape, Trusted},
   http::HeaderMap,
   lazy_static::lazy_static,
-  ordinals::{Charm, Epoch, Height, Rarity, Sat, SatPoint},
+  ordinals::{
+    varint, Charm, Edict, Epoch, Etching, Height, Pile, Rarity, Rune, RuneId, Runestone, Sat,
+    SatPoint, SpacedRune, Terms,
+  },
   regex::Regex,
   reqwest::Url,
-  runebeta::IndexExtension,
   serde::{Deserialize, Deserializer, Serialize},
   serde_with::{DeserializeFromStr, SerializeDisplay},
   std::{
@@ -89,7 +88,7 @@ pub use self::{
   inscriptions::{Envelope, Inscription, InscriptionId},
   object::Object,
   options::Options,
-  runes::{Edict, Pile, Rune, RuneId, Runestone, SpacedRune},
+  runebeta::IndexExtension,
   wallet::transaction_builder::{Target, TransactionBuilder},
 };
 
@@ -108,6 +107,7 @@ macro_rules! tprintln {
     }
   };
 }
+
 pub mod api;
 pub mod arguments;
 mod blocktime;

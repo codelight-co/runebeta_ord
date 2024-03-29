@@ -1,11 +1,10 @@
-Runes Does Not Have a Specification
-===================================
+# Runes Does Not Have a Specification
 
 The Runes reference implementation, `ord`, is the normative specification of
 the Runes protocol.
 
 Nothing you read here or elsewhere, aside from the code of `ord`, is a
-specification. This prose description of the runes protocol is provided as an
+specification. This prose description of the runes protocol is provided as a
 guide to the behavior of `ord`, and the code of `ord` itself should always be
 consulted to confirm the correctness of any prose description.
 
@@ -17,8 +16,7 @@ Users of alternative implementations do so at their own risk, and services
 wishing to integrate Runes are strongly encouraged to use `ord` itself to make
 Runes transactions, and to determine the state of runes, mints, and balances.
 
-Runestones
-----------
+## Runestones
 
 Rune protocol messages are termed "runestones".
 
@@ -93,7 +91,7 @@ struct Rune(u128);
 Runestones are deciphered from transactions with the following steps:
 
 1. Find the first transaction output whose script pubkey begins with `OP_RETURN
-   OP_13`.
+OP_13`.
 
 2. Concatenate all following data pushes into a payload buffer.
 
@@ -169,30 +167,30 @@ in a runestone.
 
 For example, to encode the following edicts:
 
-| block | TX | amount | output |
-|-------|----|--------|--------|
-| 10    | 5  | 5      | 1      |
-| 50    | 1  | 25     | 4      |
-| 10    | 7  | 1      | 8      |
-| 10    | 5  | 10     | 3      |
+| block | TX  | amount | output |
+| ----- | --- | ------ | ------ |
+| 10    | 5   | 5      | 1      |
+| 50    | 1   | 25     | 4      |
+| 10    | 7   | 1      | 8      |
+| 10    | 5   | 10     | 3      |
 
 They are first sorted by block height and transaction index:
 
-| block | TX | amount | output |
-|-------|----|--------|--------|
-| 10    | 5  | 5      | 1      |
-| 10    | 5  | 10     | 3      |
-| 10    | 7  | 1      | 8      |
-| 50    | 1  | 25     | 4      |
+| block | TX  | amount | output |
+| ----- | --- | ------ | ------ |
+| 10    | 5   | 5      | 1      |
+| 10    | 5   | 10     | 3      |
+| 10    | 7   | 1      | 8      |
+| 50    | 1   | 25     | 4      |
 
 And then delta encoded as:
 
 | block delta | TX delta | amount | output |
-|-------------|----------|--------|--------|
-| 10          | 5        | 100    | 1      |
-| 0           | 0        | 100    | 1      |
-| 0           | 2        | 100    | 1      |
-| 40          | 1        | 100    | 1      |
+| ----------- | -------- | ------ | ------ |
+| 10          | 5        | 5      | 1      |
+| 0           | 0        | 10     | 3      |
+| 0           | 2        | 1      | 8      |
+| 40          | 1        | 25     | 4      |
 
 If an edict output is greater than the number of outputs of the transaction, an
 edict rune ID is encountered with block zero and nonzero transaction index, or
@@ -275,7 +273,7 @@ runestone is a cenotaph.
 
 ##### Rune
 
-The `Rune` field contains the name of the rune being etched. If the `Eching`
+The `Rune` field contains the name of the rune being etched. If the `Etching`
 flag is set, but the `Rune` field is omitted, a reserved rune name is
 allocated, starting with `AAAAAAAAAAAAAAAAAAAAAAAAAAA` and increasing by one
 with each such reserved rune allocated.
@@ -329,7 +327,7 @@ For example, the amount `1234` of different runes with divisibility 0 through 3
 is displayed as follows:
 
 | Divisibility | Display |
-|--------------|---------|
+| ------------ | ------- |
 | 0            | 1234    |
 | 1            | 123.4   |
 | 2            | 12.34   |
@@ -347,7 +345,7 @@ character, starting from the left of the rune's name.
 For example, the rune name `AAAA` rendered with different spacers:
 
 | Spacers | Display |
-|---------|---------|
+| ------- | ------- |
 | 0b1     | A•AAA   |
 | 0b11    | A•A•AA  |
 | 0b10    | AA•AA   |
@@ -411,7 +409,7 @@ integer.
 Rune names consist of the letters A through Z, with the following encoding:
 
 | Name | Encoding |
-|------|----------|
+| ---- | -------- |
 | A    | 0        |
 | B    | 1        |
 | …    | …        |
@@ -462,7 +460,7 @@ If a valid commitment is not present, the etching is ignored.
 A runestone may mint a rune by including the rune's ID in the `Mint` field.
 
 If the mint is open, the mint amount is added to the unallocated runes in the
-transactions inputs. These runes may be transferred using edicts, and will
+transaction's inputs. These runes may be transferred using edicts, and will
 otherwise be transferred to the first non-`OP_RETURN` output, or the output
 designated by the `Pointer` field.
 

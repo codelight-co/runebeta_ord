@@ -82,7 +82,25 @@ self
      * Taivv March 20, index data to postgres
      */
     if let Some(extension) = &self.extension {
-      let _ = extension.index_transaction_rune_entry(&txid, &id, &rune_entry);
+      if let Some(extension) = &self.extension {
+      let _ = extension.index_transaction_rune_entry(
+        &txid,
+        &id,
+        &RuneEntry {
+          block: id.block,
+          burned: 0,
+          divisibility,
+          etching: txid,
+          terms: terms.and_then(|terms| (!burn).then_some(terms)),
+          mints: 0,
+          number,
+          premine,
+          spaced_rune,
+          symbol,
+          timestamp: self.block_time.into(),
+        },
+      );
+    }
     }
 
     self.id_to_entry.insert(id.store(), rune_entry.store())?;

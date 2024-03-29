@@ -1,7 +1,4 @@
-use {
-  super::*,
-  crate::runes::{Edict, Runestone},
-};
+use super::*;
 
 struct Mint {
   id: RuneId,
@@ -42,7 +39,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
 
     let cenotaph = runestone
       .as_ref()
-      .map(|runestone| runestone.cenotaph)
+      .map(|runestone| runestone.is_cenotaph())
       .unwrap_or_default();
 
     let pointer = runestone.as_ref().and_then(|runestone| runestone.pointer);
@@ -201,7 +198,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
       }
 
       for (id, balance) in balances {
-        id.encode_balance(balance, &mut buffer);
+        Index::encode_rune_balance(id, balance, &mut buffer);
       }
 
       self.outpoint_to_balances.insert(
@@ -275,19 +272,23 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
      * Taivv March 20, index data to postgres
      */
     if let Some(extension) = &self.extension {
-      let _ = extension.index_transaction_rune_entry(&txid, &id, &RuneEntry {
-        block: id.block,
-        burned: 0,
-        divisibility,
-        etching: txid,
-        terms: terms.and_then(|terms| (!burn).then_some(terms)),
-        mints: 0,
-        number,
-        premine,
-        spaced_rune,
-        symbol,
-        timestamp: self.block_time.into(),
-      });
+      let _ = extension.index_transaction_rune_entry(
+        &txid,
+        &id,
+        &RuneEntry {
+          block: id.block,
+          burned: 0,
+          divisibility,
+          etching: txid,
+          terms: terms.and_then(|terms| (!burn).then_some(terms)),
+          mints: 0,
+          number,
+          premine,
+          spaced_rune,
+          symbol,
+          timestamp: self.block_time.into(),
+        },
+      );
     }
     let inscription_id = InscriptionId { txid, index: 0 };
 
@@ -333,7 +334,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         .statistic_to_count
         .insert(&Statistic::ReservedRunes.into(), reserved_runes + 1)?;
 
-      Rune::reserved(reserved_runes.into())
+      Rune::reserved(reserved_runes.into()).unwrap()
     };
 
     Ok(Some(Etched {
@@ -384,7 +385,10 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
       };
 
       for instruction in tapscript.instructions() {
-        let instruction = instruction?;
+        // ignore errors, since the extracted script may not be valid
+        let Ok(instruction) = instruction else {
+          break;
+        };
 
         let Some(pushbytes) = instruction.push_bytes() else {
           continue;
@@ -434,7 +438,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         let buffer = guard.value();
         let mut i = 0;
         while i < buffer.len() {
-          let ((id, balance), len) = RuneId::decode_balance(&buffer[i..]).unwrap();
+          let ((id, balance), len) = Index::decode_rune_balance(&buffer[i..]).unwrap();
           i += len;
           *unallocated.entry(id).or_default() += balance;
         }
