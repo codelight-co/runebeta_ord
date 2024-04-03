@@ -336,6 +336,19 @@ impl<'index> Updater<'index> {
     let index_inscriptions = self.height >= self.index.first_inscription_height
       && self.index.settings.index_inscriptions();
 
+    //Start add runebeta extension here
+    let extension = IndexExtension::new(
+      self.index.settings.chain(),
+      self.height as i64,
+      block.header.clone(),
+    );
+    if block.txdata.len() > 0 && index_inscriptions {
+      //Index block with data only
+      let _res = extension.index_block(&block.txdata);
+    }
+
+    // End of runebeta extension
+
     if index_inscriptions {
       // Send all missing input outpoints to be fetched right away
       let txids = block
@@ -607,6 +620,7 @@ impl<'index> Updater<'index> {
         sequence_number_to_rune_id: &mut sequence_number_to_rune_id,
         statistic_to_count: &mut statistic_to_count,
         transaction_id_to_rune: &mut transaction_id_to_rune,
+        extension: Some(extension), // Add externsion here
       };
 
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {
