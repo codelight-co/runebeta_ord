@@ -43,6 +43,12 @@ diesel::table! {
         address -> Nullable<Varchar>,
         script_pubkey -> Text,
         spent -> Bool,
+        runestone -> Jsonb,
+        cenotaph -> Jsonb,
+        edicts -> Int4,
+        mint -> Bool,
+        etching -> Bool,
+        burn -> Bool,
     }
 }
 

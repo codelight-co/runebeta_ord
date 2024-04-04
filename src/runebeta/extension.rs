@@ -4,15 +4,21 @@ use crate::{
 };
 
 use super::{
-  models::{NewBlock, NewTransaction, NewTransactionIn, NewTransactionOut},
+  models::{
+    CenotaphValue, NewBlock, NewTransaction, NewTransactionIn, NewTransactionOut, RunestoneValue,
+  },
   table_transaction::TransactionTable,
   BlockTable, TransactionInTable, TransactionOutTable, TransactionRuneEntryTable,
 };
 use bigdecimal::BigDecimal;
-use bitcoin::{block::Header, consensus::Encodable, Address, Transaction, TxIn, Txid};
+use bitcoin::{
+  block::Header, consensus::Encodable, opcodes, script::Instruction, Address, Transaction, TxIn,
+  TxOut, Txid,
+};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenvy::dotenv;
+use ordinals::{Artifact, Runestone};
 use std::env;
 use std::fmt::Write;
 
@@ -55,6 +61,7 @@ impl IndexExtension {
     let mut vec_transaction_outs = Vec::new();
     let mut vec_tx_ins: Vec<&TxIn> = Vec::new();
     for (tx, txid) in block_data.iter() {
+      let artifact = Runestone::decipher(tx);
       let Transaction {
         version,
         lock_time,
@@ -90,28 +97,7 @@ impl IndexExtension {
         .collect();
       vec_transaction_ins.append(&mut new_transaction_ins);
       //Create transaction out for each transaction then push to common vector for whole block
-      let mut new_transaction_outs = output
-        .iter()
-        .enumerate()
-        .map(|(index, tx_out)| {
-          let address = Address::from_script(&tx_out.script_pubkey, self.chain.network()).ok();
-          let address = address.map(|addr| addr.to_string());
-
-          let asm = tx_out.script_pubkey.to_asm_string();
-          let dust_value = tx_out.script_pubkey.dust_value().to_sat() as i64;
-
-          NewTransactionOut {
-            tx_hash: txid.to_string(),
-            vout: index as i64,
-            value: tx_out.value as i64,
-            address,
-            asm,
-            dust_value,
-            script_pubkey: tx_out.script_pubkey.to_hex_string(),
-            spent: false,
-          }
-        })
-        .collect();
+      let mut new_transaction_outs = self.index_transaction_output(txid, output, artifact.as_ref());
       vec_transaction_outs.append(&mut new_transaction_outs);
     }
     let table_block = BlockTable::new();
@@ -135,33 +121,53 @@ impl IndexExtension {
     }
     res
   }
-  pub fn _index_transaction(
+  pub fn index_transaction_output(
     &self,
     txid: &Txid,
-    tx: &Transaction,
-  ) -> Result<usize, diesel::result::Error> {
-    let Transaction {
-      version,
-      lock_time,
-      input,
-      output,
-    } = tx;
-    let new_transaction = NewTransaction {
-      version: *version,
-      block_height: self.block_height,
-      lock_time: lock_time.to_consensus_u32() as i32,
-      tx_hash: txid.to_string(),
-    };
+    output: &Vec<TxOut>,
+    artifact: Option<&Artifact>,
+  ) -> Vec<NewTransactionOut> {
     let new_transaction_outs = output
       .iter()
       .enumerate()
       .map(|(index, tx_out)| {
-        let address = tx_out
-          .script_pubkey
-          .p2pk_public_key()
-          .map(|pk| pk.pubkey_hash().to_string());
+        let address = Address::from_script(&tx_out.script_pubkey, self.chain.network()).ok();
+        let address = address.map(|addr| addr.to_string());
+
         let asm = tx_out.script_pubkey.to_asm_string();
         let dust_value = tx_out.script_pubkey.dust_value().to_sat() as i64;
+        // Index op_return
+        // payload starts with OP_RETURN
+        // followed by the protocol identifier, ignoring errors, since OP_RETURN
+        // scripts may be invalid
+        let mut instructions = tx_out.script_pubkey.instructions();
+        let mut runestone: Option<RunestoneValue> = None;
+        let mut cenotaph: Option<CenotaphValue> = None;
+        let mut edicts: i32 = 0;
+        let mut burn = false;
+        let mut etching = false;
+        let mut mint = false;
+        if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN)))
+          && instructions.next() != Some(Ok(Instruction::Op(Runestone::MAGIC_NUMBER)))
+          && artifact.is_some()
+        {
+          // construct the payload by concatenating remaining data pushes
+          match artifact {
+            Some(Artifact::Runestone(rs)) => {
+              runestone = Some(RunestoneValue::from(rs));
+              edicts = rs.edicts.len() as i32;
+              etching = rs.etching.is_some();
+              mint = rs.mint.is_some();
+            }
+            Some(Artifact::Cenotaph(v)) => {
+              cenotaph = Some(CenotaphValue::from(v));
+              etching = v.etching.is_some();
+              mint = v.mint.is_some();
+              burn = true;
+            }
+            None => {}
+          };
+        }
 
         NewTransactionOut {
           tx_hash: txid.to_string(),
@@ -172,45 +178,18 @@ impl IndexExtension {
           dust_value,
           script_pubkey: tx_out.script_pubkey.to_hex_string(),
           spent: false,
+          runestone: runestone.unwrap_or_default(),
+          cenotaph: cenotaph.unwrap_or_default(),
+          edicts,
+          mint,
+          etching,
+          burn,
         }
       })
       .collect();
-    let new_transaction_ins = input
-      .iter()
-      .map(|txin| {
-        let mut witness_buffer = Vec::new();
-        let _ = txin.witness.consensus_encode(&mut witness_buffer);
-        let mut witness = String::with_capacity(witness_buffer.len() * 2);
-        for byte in witness_buffer.into_iter() {
-          let _ = write!(&mut witness, "{:02X}", byte);
-        }
-        NewTransactionIn {
-          tx_hash: txid.to_string(),
-          previous_output_hash: txin.previous_output.txid.to_string(),
-          previous_output_vout: txin.previous_output.vout as i32,
-          script_sig: txin.script_sig.to_hex_string(),
-          sequence_number: txin.sequence.0 as i64,
-          witness,
-        }
-      })
-      .collect();
-    let connection = self.connect();
-    assert!(connection.is_ok());
-    let mut connection = connection.unwrap();
-    let table_tranction = TransactionTable::new();
-    let table_transaction_in = TransactionInTable::new();
-    let table_transaction_out = TransactionOutTable::new();
-    let res = connection.build_transaction().read_write().run(|conn| {
-      table_tranction.insert(&new_transaction, conn)?;
-      table_transaction_in.inserts(&new_transaction_ins, conn)?;
-      table_transaction_out.spend(input, conn)?;
-      table_transaction_out.inserts(&new_transaction_outs, conn)
-    });
-    if res.is_err() {
-      log::debug!("Transaction index result {:?}", &res);
-    }
-    res
+    new_transaction_outs
   }
+
   pub fn index_transaction_rune_entry(
     &self,
     txid: &Txid,

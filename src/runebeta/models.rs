@@ -8,6 +8,7 @@ use diesel::{
   sql_types::Jsonb,
   AsExpression,
 };
+use ordinals::{Cenotaph, Edict, Etching, Rune, RuneId, Runestone};
 use std::io::Write;
 // https://kotiri.com/2018/01/31/postgresql-diesel-rust-types.html
 // https://vasilakisfil.social/blog/2020/05/09/rust-diesel-jsonb/
@@ -74,6 +75,95 @@ impl From<&Terms> for MintEntryType {
   }
 }
 
+#[derive(Clone, FromSqlRow, AsExpression, serde::Serialize, serde::Deserialize, Debug, Default)]
+#[diesel(sql_type = Jsonb)]
+pub struct RunestoneValue {
+  pub edicts: Vec<Edict>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub etching: Option<Etching>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub mint: Option<RuneId>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub pointer: Option<u32>,
+}
+impl ToSql<Jsonb, Pg> for RunestoneValue {
+  fn to_sql(&self, out: &mut Output<Pg>) -> diesel::serialize::Result {
+    let value = serde_json::to_value(self)?;
+    // <serde_json::Value as ToSql<Jsonb, Pg>>::to_sql(&value, out)
+    out.write_all(&[1])?;
+    serde_json::to_writer(out, &value)
+      .map(|_| IsNull::No)
+      .map_err(Into::into)
+  }
+}
+impl FromSql<Jsonb, Pg> for RunestoneValue {
+  fn from_sql(
+    bytes: <Pg as diesel::backend::Backend>::RawValue<'_>,
+  ) -> diesel::deserialize::Result<Self> {
+    let value = <serde_json::Value as FromSql<Jsonb, Pg>>::from_sql(bytes)?;
+    Ok(serde_json::from_value(value)?)
+  }
+}
+
+impl From<&Runestone> for RunestoneValue {
+  fn from(value: &Runestone) -> Self {
+    let Runestone {
+      edicts,
+      etching,
+      mint,
+      pointer,
+    } = value;
+    RunestoneValue {
+      edicts: edicts.clone(),
+      etching: etching.clone(),
+      mint: mint.clone(),
+      pointer: pointer.clone(),
+    }
+  }
+}
+
+#[derive(Clone, FromSqlRow, AsExpression, serde::Serialize, serde::Deserialize, Debug, Default)]
+#[diesel(sql_type = Jsonb)]
+pub struct CenotaphValue {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub etching: Option<Rune>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub mint: Option<RuneId>,
+  pub flaws: u32,
+}
+impl ToSql<Jsonb, Pg> for CenotaphValue {
+  fn to_sql(&self, out: &mut Output<Pg>) -> diesel::serialize::Result {
+    let value = serde_json::to_value(self)?;
+    // <serde_json::Value as ToSql<Jsonb, Pg>>::to_sql(&value, out)
+    out.write_all(&[1])?;
+    serde_json::to_writer(out, &value)
+      .map(|_| IsNull::No)
+      .map_err(Into::into)
+  }
+}
+impl FromSql<Jsonb, Pg> for CenotaphValue {
+  fn from_sql(
+    bytes: <Pg as diesel::backend::Backend>::RawValue<'_>,
+  ) -> diesel::deserialize::Result<Self> {
+    let value = <serde_json::Value as FromSql<Jsonb, Pg>>::from_sql(bytes)?;
+    Ok(serde_json::from_value(value)?)
+  }
+}
+
+impl From<&Cenotaph> for CenotaphValue {
+  fn from(value: &Cenotaph) -> Self {
+    let Cenotaph {
+      etching,
+      mint,
+      flaws,
+    } = value;
+    CenotaphValue {
+      etching: etching.clone(),
+      mint: mint.clone(),
+      flaws: flaws.clone(),
+    }
+  }
+}
 //Block
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = crate::schema::blocks)]
@@ -158,6 +248,12 @@ pub struct TransactionOut {
   pub address: Option<String>,
   pub script_pubkey: String,
   pub spent: bool,
+  pub runestone: RunestoneValue,
+  pub cenotaph: CenotaphValue,
+  pub edicts: i32,
+  pub etching: bool,
+  pub mint: bool,
+  pub burn: bool,
 }
 
 #[derive(Insertable, AsChangeset)]
@@ -172,6 +268,12 @@ pub struct NewTransactionOut {
   pub address: Option<String>,
   pub script_pubkey: String,
   pub spent: bool,
+  pub runestone: RunestoneValue,
+  pub cenotaph: CenotaphValue,
+  pub edicts: i32,
+  pub etching: bool,
+  pub mint: bool,
+  pub burn: bool,
 }
 
 #[derive(Queryable, Selectable)]
