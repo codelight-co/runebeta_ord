@@ -13,6 +13,16 @@ impl<'conn> TransactionRuneEntryTable {
   pub fn new() -> Self {
     Self {}
   }
+  pub fn insert(
+    &self,
+    entries: &Vec<NewTxRuneEntry>,
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    diesel::insert_into(transaction_rune_entries::table())
+      .values(entries)
+      //.returning(OutpointRuneBalance::as_returning())
+      .execute(connection)
+  }
   pub fn create(
     &self,
     txid: &Txid,
@@ -29,7 +39,7 @@ impl<'conn> TransactionRuneEntryTable {
       rune_id: rune_id_value.to_string(),
       burned: BigDecimal::from(rune_entry.burned),
       divisibility: rune_entry.divisibility as i16,
-      etching: etching_value.as_str(),
+      etching: etching_value,
       mints: rune_entry.mints as i64,
       number: rune_entry.block as i64,
       rune: BigDecimal::from(rune_entry.spaced_rune.rune.0),
@@ -37,7 +47,7 @@ impl<'conn> TransactionRuneEntryTable {
       premine: rune_entry.premine as i64,
       spaced_rune: rune_entry.spaced_rune.to_string(),
       supply: BigDecimal::from(0_u128),
-      symbol: symbol_value.as_ref().map(|c| c.as_str()),
+      symbol: symbol_value,
       timestamp: rune_entry.timestamp as i32,
       mint_entry: rune_entry
         .terms

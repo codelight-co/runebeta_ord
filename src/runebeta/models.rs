@@ -300,17 +300,17 @@ pub struct TxRuneEntry {
   pub timestamp: i32,
 }
 
-#[derive(Insertable, PartialEq, Debug, AsChangeset)]
+#[derive(Insertable, PartialEq, Clone, Debug, AsChangeset)]
 #[diesel(table_name = crate::schema::transaction_rune_entries)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct NewTxRuneEntry<'a> {
+pub struct NewTxRuneEntry {
   pub tx_hash: String,
   // pub rune_height: i32,
   // pub rune_index: i16,
   pub rune_id: String,
   pub burned: BigDecimal,
   pub divisibility: i16,
-  pub etching: &'a str,
+  pub etching: String,
   pub mint_entry: MintEntryType,
   pub mints: i64,
   pub number: i64, //Block
@@ -319,7 +319,7 @@ pub struct NewTxRuneEntry<'a> {
   pub premine: i64,
   pub spaced_rune: String,
   pub supply: BigDecimal,
-  pub symbol: Option<&'a str>,
+  pub symbol: Option<String>,
   pub timestamp: i32,
 }
 
@@ -374,7 +374,7 @@ pub struct OutpointRuneBalance {
   pub balance_value: BigDecimal,
 }
 
-#[derive(Insertable)]
+#[derive(Insertable, Clone, Debug)]
 #[diesel(table_name = crate::schema::outpoint_rune_balances)]
 pub struct NewOutpointRuneBalance {
   pub tx_hash: String,

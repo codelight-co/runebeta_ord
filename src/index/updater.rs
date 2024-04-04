@@ -626,7 +626,12 @@ impl<'index> Updater<'index> {
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {
         rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid)?;
       }
-
+      if let Some(extension) = &mut rune_updater.extension {
+        let commit_res = extension.commit();
+        if commit_res.is_err() {
+          log::debug!("Commit error {:?}", commit_res);
+        }
+      }
       rune_updater.update()?;
     }
 

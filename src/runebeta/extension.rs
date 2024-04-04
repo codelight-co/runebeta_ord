@@ -1,11 +1,15 @@
 use crate::{
-  runebeta::{models::NewOutpointRuneBalance, OutpointRuneBalanceTable},
+  runebeta::{
+    models::{MintEntryType, NewOutpointRuneBalance},
+    OutpointRuneBalanceTable,
+  },
   Chain, RuneEntry, RuneId,
 };
 
 use super::{
   models::{
-    CenotaphValue, NewBlock, NewTransaction, NewTransactionIn, NewTransactionOut, RunestoneValue,
+    CenotaphValue, NewBlock, NewTransaction, NewTransactionIn, NewTransactionOut, NewTxRuneEntry,
+    RunestoneValue,
   },
   table_transaction::TransactionTable,
   BlockTable, TransactionInTable, TransactionOutTable, TransactionRuneEntryTable,
@@ -28,6 +32,9 @@ pub struct IndexExtension {
   block_height: i64,
   block_header: Header,
   database_url: String,
+  //Store outpoint banlance in each rune update
+  outpoint_balances: Vec<NewOutpointRuneBalance>,
+  rune_entries: Vec<NewTxRuneEntry>,
 }
 impl IndexExtension {
   pub fn new(chain: Chain, block_height: i64, block_header: Header) -> Self {
@@ -41,6 +48,8 @@ impl IndexExtension {
       block_height,
       block_header,
       database_url,
+      outpoint_balances: vec![],
+      rune_entries: vec![],
     }
   }
   pub fn connect(&self) -> Result<PgConnection, ConnectionError> {
@@ -191,34 +200,58 @@ impl IndexExtension {
   }
 
   pub fn index_transaction_rune_entry(
-    &self,
+    &mut self,
     txid: &Txid,
     rune_id: &RuneId,
     rune_entry: &RuneEntry,
-  ) -> Result<usize, diesel::result::Error> {
+  ) -> Result<(), diesel::result::Error> {
     log::debug!("Runebeta index transaction rune {}, rune {}", txid, rune_id);
-    let table_tranction_rune = TransactionRuneEntryTable::new();
-    let connection = self.connect();
-    assert!(connection.is_ok());
-    //Must be safe to unwrap;
-    let mut connection = connection.unwrap();
-    let res = connection
-      .build_transaction()
-      .read_write()
-      .run(|conn| table_tranction_rune.create(txid, rune_id, rune_entry, conn));
-    log::debug!("Transaction rune index result {:?}", &res);
-    res
+    let tx_rune_entry = NewTxRuneEntry {
+      tx_hash: txid.to_string(),
+      // rune_height: rune_id.block as i32,
+      // rune_index: rune_id.tx as i16,
+      rune_id: rune_id.to_string(),
+      burned: BigDecimal::from(rune_entry.burned),
+      divisibility: rune_entry.divisibility as i16,
+      etching: rune_entry.etching.to_string(),
+      mints: rune_entry.mints as i64,
+      number: rune_entry.block as i64,
+      rune: BigDecimal::from(rune_entry.spaced_rune.rune.0),
+      spacers: rune_entry.spaced_rune.spacers as i32,
+      premine: rune_entry.premine as i64,
+      spaced_rune: rune_entry.spaced_rune.to_string(),
+      supply: BigDecimal::from(0_u128),
+      symbol: rune_entry.symbol.map(|c| c.to_string()),
+      timestamp: rune_entry.timestamp as i32,
+      mint_entry: rune_entry
+        .terms
+        .map(|entry| MintEntryType::from(&entry))
+        .unwrap_or_default(),
+    };
+    self.rune_entries.push(tx_rune_entry);
+    // let table_tranction_rune = TransactionRuneEntryTable::new();
+    // let connection = self.connect();
+    // assert!(connection.is_ok());
+    // //Must be safe to unwrap;
+    // let mut connection = connection.unwrap();
+    // let res = connection
+    //   .build_transaction()
+    //   .read_write()
+    //   .run(|conn| table_tranction_rune.create(txid, rune_id, rune_entry, conn));
+    // log::debug!("Transaction rune index result {:?}", &res);
+    // res
+    Ok(())
   }
 
   pub fn index_outpoint_balances(
-    &self,
+    &mut self,
     txid: &Txid,
     vout: i32,
     balances: &Vec<(RuneId, BigDecimal)>,
   ) -> Result<usize, diesel::result::Error> {
     log::debug!("Runebeta index outpoint balances of transaction {}", txid);
-    let table_outpoint_balance = OutpointRuneBalanceTable::new();
-    let outpoint_balances = balances
+
+    let mut outpoint_balances = balances
       .iter()
       .map(|(rune_id, balance)| NewOutpointRuneBalance {
         tx_hash: txid.to_string(),
@@ -226,17 +259,44 @@ impl IndexExtension {
         rune_id: rune_id.to_string(),
         balance_value: balance.clone(),
       })
-      .collect();
+      .collect::<Vec<NewOutpointRuneBalance>>();
+    let len = outpoint_balances.len();
+    self.outpoint_balances.append(&mut outpoint_balances);
+    // let connection = self.connect();
+    // assert!(connection.is_ok());
+    // //Must be safe to unwrap;
+    // let mut connection = connection.unwrap();
+    // let res = connection
+    //   .build_transaction()
+    //   .read_write()
+    //   .run(|conn| table_outpoint_balance.insert(&outpoint_balances, conn));
+    // if res.is_err() {
+    //   log::debug!("Transaction rune index result {:?}", &res);
+    // }
+    // res
+    Ok(len)
+  }
+  pub fn commit(&mut self) -> Result<(), diesel::result::Error> {
+    let table_outpoint_balance = OutpointRuneBalanceTable::new();
+    let table_tranction_rune = TransactionRuneEntryTable::new();
     let connection = self.connect();
     assert!(connection.is_ok());
     //Must be safe to unwrap;
     let mut connection = connection.unwrap();
-    let res = connection
-      .build_transaction()
-      .read_write()
-      .run(|conn| table_outpoint_balance.insert(&outpoint_balances, conn));
+    let res = connection.build_transaction().read_write().run(|conn| {
+      if self.outpoint_balances.len() > 0 {
+        table_outpoint_balance.insert(&self.outpoint_balances, conn)?;
+      }
+      if self.rune_entries.len() > 0 {
+        table_tranction_rune.insert(&self.rune_entries, conn)?;
+      }
+      Ok(())
+    });
     if res.is_err() {
       log::debug!("Transaction rune index result {:?}", &res);
+    } else {
+      self.rune_entries.clear();
+      self.outpoint_balances.clear();
     }
     res
   }

@@ -181,7 +181,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
 
       // Sort balances by id so tests can assert balances in a fixed order
       balances.sort();
-      if let Some(extension) = &self.extension {
+      if let Some(extension) = &mut self.extension {
         let _res = extension.index_outpoint_balances(
           &txid,
           vout as i32,
@@ -287,7 +287,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
     /*
      * Taivv April 03, index data to postgres
      */
-    if let Some(extension) = &self.extension {
+    if let Some(extension) = &mut self.extension {
       let _ = extension.index_transaction_rune_entry(&txid, &id, &entry);
     }
     self.id_to_entry.insert(id.store(), entry.store())?;

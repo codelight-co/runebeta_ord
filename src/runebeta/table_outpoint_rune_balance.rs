@@ -1,6 +1,6 @@
-use diesel::{associations::HasTable, PgConnection, RunQueryDsl, SelectableHelper};
+use diesel::{associations::HasTable, PgConnection, RunQueryDsl};
 
-use super::models::{NewOutpointRuneBalance, OutpointRuneBalance};
+use super::models::NewOutpointRuneBalance;
 use crate::schema::outpoint_rune_balances::dsl::*;
 #[derive(Clone)]
 pub struct OutpointRuneBalanceTable {}
@@ -16,7 +16,7 @@ impl<'conn> OutpointRuneBalanceTable {
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(outpoint_rune_balances::table())
       .values(balances)
-      .returning(OutpointRuneBalance::as_returning())
+      //.returning(OutpointRuneBalance::as_returning())
       .execute(connection)
   }
 }
