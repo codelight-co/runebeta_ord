@@ -90,7 +90,7 @@ impl ToSql<Jsonb, Pg> for RunestoneValue {
   fn to_sql(&self, out: &mut Output<Pg>) -> diesel::serialize::Result {
     let value = serde_json::to_value(self)?;
     // <serde_json::Value as ToSql<Jsonb, Pg>>::to_sql(&value, out)
-    //out.write_all(&[1])?;
+    out.write_all(&[1])?;
     serde_json::to_writer(out, &value)
       .map(|_| IsNull::No)
       .map_err(Into::into)

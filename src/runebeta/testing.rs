@@ -13,6 +13,39 @@ use serde_json::json;
 use std::str::FromStr;
 
 #[test]
+fn test_index_transaction_with_etching() {
+  let _block_hash = "0000000000000000c15b4efbffa470c066377d09087a030e4b1f5e4ef5aca838";
+  let txid =
+    Txid::from_str("7c946a72314d41ac080b2d4b1e1e2ad347c655cc3b5ba07b6f3f7ad3d26d6db0").unwrap();
+  let payload: &str = "010000000001019681b514daa81c45bb549c01fc71ac6b77bdd276573aa09b3fe66d570fa276790000000000fdffffff0200000000000000001a6a5d17020104ccad90e1d8e0e116010103a2020680c2d72f160101000000000000002251208c0b89163787ce8e5ce3f1262745024c91a6e488afb89f83a6ccaaa4db64b13503401153898cc07296fb111e87de8638b76f91bc415fac5d7c09dfb4e81d7c334632890095dc2daa1c691acdc1567cbe47e0ecf22ac67aae60c0f7463d989ba7c6a32d20fb8d393fc7cc9bf972b99ef827555c126b8e333cf29241da3c5ae1e4cab86e86ac006307cc16248c05872d6821c0fb8d393fc7cc9bf972b99ef827555c126b8e333cf29241da3c5ae1e4cab86e8600000000";
+  let transaction = parse_transaction(payload);
+  assert!(transaction.is_ok());
+  let transaction = transaction.unwrap();
+  let artifact = Runestone::decipher(&transaction);
+  let header = Header {
+    version: Version::TWO,
+    prev_blockhash: BlockHash::from_str(
+      "00000000001bce60a31d34ab34924bc337d934fd00c24bc19eec3443ffbd6866",
+    )
+    .unwrap(),
+    merkle_root: TxMerkleNode::from_str(
+      "19678f485e698e57cce27d1c83d3db637f69425c56de1e53420c7f0837041174",
+    )
+    .unwrap(),
+    time: 0,
+    bits: CompactTarget::from_consensus(421978704),
+    nonce: 1844512382,
+  };
+  let extension = IndexExtension::new(Chain::from_str("testnet").unwrap(), 0, header);
+  let vec_out = extension.index_transaction_output(&txid, &transaction.output, artifact.as_ref());
+  println!("{:?}", &vec_out);
+  assert_eq!(vec_out.len(), 2);
+  let txout = vec_out.get(0).unwrap();
+  println!("{:?}", txout);
+  assert_eq!(txout.etching, txout.runestone.etching.is_some());
+}
+
+#[test]
 fn test_index_transaction_with_edicts() {
   let _block_hash = "00000000b622ddc1983ef0ee643801699cf5676f532592e68d1c8c0bcab0e903";
   let txid =
