@@ -157,7 +157,7 @@ impl IndexExtension {
         let mut etching = false;
         let mut mint = false;
         if instructions.next() == Some(Ok(Instruction::Op(opcodes::all::OP_RETURN)))
-          && instructions.next() != Some(Ok(Instruction::Op(Runestone::MAGIC_NUMBER)))
+          && instructions.next() == Some(Ok(Instruction::Op(Runestone::MAGIC_NUMBER)))
           && artifact.is_some()
         {
           // construct the payload by concatenating remaining data pushes
