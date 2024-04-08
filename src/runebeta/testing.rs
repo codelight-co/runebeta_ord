@@ -1,4 +1,4 @@
-use crate::{Chain, IndexExtension};
+use crate::{Chain, IndexExtension, RuneEntry};
 use anyhow::Result;
 use bitcoin::{
   block::{Header, Version},
@@ -8,9 +8,83 @@ use bitcoin::{
 };
 use hex::FromHex;
 use hyper::body::Buf;
-use ordinals::Runestone;
+use ordinals::{Artifact, Etching, RuneId, Runestone, SpacedRune};
 use serde_json::json;
 use std::str::FromStr;
+
+#[test]
+fn test_mintentry_etching() {
+  let id = RuneId {
+    block: 2585710,
+    tx: 1,
+  };
+  let block_time = 1712636172;
+  let txid =
+    Txid::from_str("bc0ee205a8e07d785fab5595099e9adb542f006443a25a2da3c42e465f10c34e").unwrap();
+  let payload: &str = "0100000000010133ed4e69f8491c242cba5cca6c5f1e738724783298ce412b6081446d84cf16c20000000000fdffffff020000000000000000276a5d24020104c5d2e0cce19896adc18fb6b6b906010a03909104055406904e1601000000904e0101000000000000002251208c0b89163787ce8e5ce3f1262745024c91a6e488afb89f83a6ccaaa4db64b135034018007c4090d37b322f4a04a16f959924379a6e0c6ac14e200e8dbe996bcc64262e9a9324223456b79b1e7c7c90140f7c790c027303c4d3a338cdb9454f3c9e843220f77af935250eff2a1f0f049c6c974aff498c38519833ea78f1ecc4575ece44d7ac00630c45299819c6585ac187cd96336821c1f77af935250eff2a1f0f049c6c974aff498c38519833ea78f1ecc4575ece44d700000000";
+  let transaction = parse_transaction(payload);
+  assert!(transaction.is_ok());
+  let transaction = transaction.unwrap();
+  let artifact = Runestone::decipher(&transaction);
+  assert!(artifact.is_some());
+  let artifact = artifact.unwrap();
+  let rune = match &artifact {
+    Artifact::Runestone(runestone) => match runestone.etching {
+      Some(etching) => etching.rune.clone(),
+      None => None,
+    },
+    Artifact::Cenotaph(cenotaph) => match cenotaph.etching {
+      Some(rune) => Some(rune.clone()),
+      None => None,
+    },
+  };
+  if let Some(rune) = rune {
+    let number = 1;
+    let entry = match artifact {
+      Artifact::Cenotaph(_) => RuneEntry {
+        block: id.block,
+        burned: 0,
+        divisibility: 0,
+        etching: txid,
+        terms: None,
+        mints: 0,
+        number,
+        premine: 0,
+        spaced_rune: SpacedRune { rune, spacers: 0 },
+        symbol: None,
+        timestamp: block_time,
+      },
+      Artifact::Runestone(Runestone { etching, .. }) => {
+        let Etching {
+          divisibility,
+          terms,
+          premine,
+          spacers,
+          symbol,
+          ..
+        } = etching.unwrap();
+
+        RuneEntry {
+          block: id.block,
+          burned: 0,
+          divisibility: divisibility.unwrap_or_default(),
+          etching: txid,
+          terms,
+          mints: 0,
+          number,
+          premine: premine.unwrap_or_default(),
+          spaced_rune: SpacedRune {
+            rune,
+            spacers: spacers.unwrap_or_default(),
+          },
+          symbol,
+          timestamp: block_time,
+        }
+      }
+    };
+    //assert!(entry.terms.is_some());
+  };
+}
 
 #[test]
 fn test_index_transaction_with_etching() {
@@ -36,7 +110,7 @@ fn test_index_transaction_with_etching() {
     bits: CompactTarget::from_consensus(421978704),
     nonce: 1844512382,
   };
-  let extension = IndexExtension::new(Chain::from_str("testnet").unwrap(), 0, header);
+  let extension = IndexExtension::new(Chain::from_str("testnet").unwrap());
   let vec_out = extension.index_transaction_output(&txid, &transaction.output, artifact.as_ref());
   println!("{:?}", &vec_out);
   assert_eq!(vec_out.len(), 2);
@@ -71,7 +145,7 @@ fn test_index_transaction_with_edicts() {
     bits: CompactTarget::from_consensus(486604799),
     nonce: 1972576522,
   };
-  let extension = IndexExtension::new(Chain::from_str("testnet").unwrap(), 0, header);
+  let extension = IndexExtension::new(Chain::from_str("testnet").unwrap());
   let vec_out = extension.index_transaction_output(&txid, &transaction.output, artifact.as_ref());
   assert_eq!(vec_out.len(), 5);
   let txout = vec_out.get(1).unwrap();

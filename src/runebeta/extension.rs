@@ -16,59 +16,90 @@ use super::{
 };
 use bigdecimal::BigDecimal;
 use bitcoin::{
-  block::Header, consensus::Encodable, opcodes, script::Instruction, Address, Transaction, TxIn,
-  TxOut, Txid,
+  block::Header, consensus::Encodable, opcodes, script::Instruction, Address, Transaction, TxOut,
+  Txid,
 };
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenvy::dotenv;
 use ordinals::{Artifact, Runestone};
-use std::env;
 use std::fmt::Write;
+use std::{env, thread, time};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct IndexExtension {
   chain: Chain,
-  block_height: i64,
-  block_header: Header,
   database_url: String,
+  // Raw txin for update previous txouts'spent => true
+  tx_ins: Vec<(Txid, i64)>,
+  blocks: Vec<NewBlock>,
+  transactions: Vec<NewTransaction>,
+  transaction_ins: Vec<NewTransactionIn>,
+  transaction_outs: Vec<NewTransactionOut>,
   //Store outpoint banlance in each rune update
   outpoint_balances: Vec<NewOutpointRuneBalance>,
   rune_entries: Vec<NewTxRuneEntry>,
 }
 impl IndexExtension {
-  pub fn new(chain: Chain, block_height: i64, block_header: Header) -> Self {
+  pub fn new(chain: Chain) -> Self {
     dotenv().ok();
-
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    // let connection = PgConnection::establish(&database_url)
-    //   .unwrap_or_else(|_| panic!("Error connecting to {}", database_url));
     Self {
       chain,
-      block_height,
-      block_header,
       database_url,
+      tx_ins: vec![],
+      blocks: vec![],
+      transactions: vec![],
+      transaction_ins: vec![],
+      transaction_outs: vec![],
       outpoint_balances: vec![],
       rune_entries: vec![],
     }
   }
-  pub fn connect(&self) -> Result<PgConnection, ConnectionError> {
-    PgConnection::establish(&self.database_url)
+  pub fn get_cache_size(&self) -> u128 {
+    self.blocks.len() as u128
+      + self.transactions.len() as u128
+      + self.transaction_ins.len() as u128
+      + self.transaction_outs.len() as u128
+      + self.outpoint_balances.len() as u128
+      + self.rune_entries.len() as u128
+      + self.tx_ins.len() as u128
+  }
+  /*
+   * Loop until successfull establish connection
+   */
+  pub fn get_connection(&self) -> Option<PgConnection> {
+    loop {
+      let Ok(connection) = PgConnection::establish(&self.database_url) else {
+        let ten_second = time::Duration::from_secs(10);
+        thread::sleep(ten_second);
+        continue;
+      };
+      return Some(connection);
+    }
+  }
+  pub fn get_indexed_block_height(&self) -> Result<i64, diesel::result::Error> {
+    if let Some(mut connection) = self.get_connection() {
+      let table_block = BlockTable::new();
+      table_block.get_latest_block_height(&mut connection)
+    } else {
+      log::debug!("Cannot establish connection");
+      Ok(0)
+    }
   }
   pub fn index_block(
-    &self,
+    &mut self,
+    block_height: i64,
+    block_header: &Header,
     block_data: &Vec<(Transaction, Txid)>,
-  ) -> Result<usize, diesel::result::Error> {
+  ) -> Result<(), diesel::result::Error> {
     let new_block = NewBlock {
-      block_time: self.block_header.time as i64,
-      block_height: self.block_height,
-      previous_hash: self.block_header.prev_blockhash.to_string(),
-      block_hash: self.block_header.merkle_root.to_string(),
+      block_time: block_header.time as i64,
+      block_height,
+      previous_hash: block_header.prev_blockhash.to_string(),
+      block_hash: block_header.block_hash().to_string(),
     };
-    let mut vec_transactions = Vec::new();
-    let mut vec_transaction_ins = Vec::new();
-    let mut vec_transaction_outs = Vec::new();
-    let mut vec_tx_ins: Vec<&TxIn> = Vec::new();
+    self.blocks.push(new_block);
     for (tx, txid) in block_data.iter() {
       let artifact = Runestone::decipher(tx);
       let Transaction {
@@ -79,12 +110,17 @@ impl IndexExtension {
       } = tx;
       let new_transaction = NewTransaction {
         version: *version,
-        block_height: self.block_height,
+        block_height,
         lock_time: lock_time.to_consensus_u32() as i32,
         tx_hash: txid.to_string(),
       };
-      vec_transactions.push(new_transaction);
-      input.iter().for_each(|tx_in| vec_tx_ins.push(tx_in));
+      self.transactions.push(new_transaction);
+      input.iter().for_each(|tx_in| {
+        self.tx_ins.push((
+          tx_in.previous_output.txid.clone(),
+          tx_in.previous_output.vout as i64,
+        ))
+      });
       let mut new_transaction_ins = input
         .iter()
         .map(|txin| {
@@ -104,31 +140,12 @@ impl IndexExtension {
           }
         })
         .collect();
-      vec_transaction_ins.append(&mut new_transaction_ins);
+      self.transaction_ins.append(&mut new_transaction_ins);
       //Create transaction out for each transaction then push to common vector for whole block
       let mut new_transaction_outs = self.index_transaction_output(txid, output, artifact.as_ref());
-      vec_transaction_outs.append(&mut new_transaction_outs);
+      self.transaction_outs.append(&mut new_transaction_outs);
     }
-    let table_block = BlockTable::new();
-    let table_tranction = TransactionTable::new();
-    let table_transaction_in = TransactionInTable::new();
-    let table_transaction_out = TransactionOutTable::new();
-    let connection = self.connect();
-    assert!(connection.is_ok());
-
-    //must be safe to unwrap;
-    let mut connection = connection.unwrap();
-    let res = connection.build_transaction().read_write().run(|conn| {
-      table_block.insert(&new_block, conn)?;
-      table_tranction.inserts(&vec_transactions, conn)?;
-      table_transaction_in.inserts(&vec_transaction_ins, conn)?;
-      table_transaction_out.spends(&vec_tx_ins, conn)?;
-      table_transaction_out.inserts(&vec_transaction_outs, conn)
-    });
-    if res.is_err() {
-      log::debug!("Block index result {:?}", &res);
-    }
-    res
+    Ok(())
   }
   pub fn index_transaction_output(
     &self,
@@ -229,17 +246,6 @@ impl IndexExtension {
         .unwrap_or_default(),
     };
     self.rune_entries.push(tx_rune_entry);
-    // let table_tranction_rune = TransactionRuneEntryTable::new();
-    // let connection = self.connect();
-    // assert!(connection.is_ok());
-    // //Must be safe to unwrap;
-    // let mut connection = connection.unwrap();
-    // let res = connection
-    //   .build_transaction()
-    //   .read_write()
-    //   .run(|conn| table_tranction_rune.create(txid, rune_id, rune_entry, conn));
-    // log::debug!("Transaction rune index result {:?}", &res);
-    // res
     Ok(())
   }
 
@@ -262,42 +268,69 @@ impl IndexExtension {
       .collect::<Vec<NewOutpointRuneBalance>>();
     let len = outpoint_balances.len();
     self.outpoint_balances.append(&mut outpoint_balances);
-    // let connection = self.connect();
-    // assert!(connection.is_ok());
-    // //Must be safe to unwrap;
-    // let mut connection = connection.unwrap();
-    // let res = connection
-    //   .build_transaction()
-    //   .read_write()
-    //   .run(|conn| table_outpoint_balance.insert(&outpoint_balances, conn));
-    // if res.is_err() {
-    //   log::debug!("Transaction rune index result {:?}", &res);
-    // }
-    // res
     Ok(len)
   }
-  pub fn commit(&mut self) -> Result<(), diesel::result::Error> {
-    let table_outpoint_balance = OutpointRuneBalanceTable::new();
-    let table_tranction_rune = TransactionRuneEntryTable::new();
-    let connection = self.connect();
-    assert!(connection.is_ok());
-    //Must be safe to unwrap;
-    let mut connection = connection.unwrap();
-    let res = connection.build_transaction().read_write().run(|conn| {
-      if self.outpoint_balances.len() > 0 {
-        table_outpoint_balance.insert(&self.outpoint_balances, conn)?;
+  pub fn commit(&mut self) -> anyhow::Result<u128> {
+    let len = self.get_cache_size();
+    if len > 0 {
+      //Try connect to postgres db until successfully establish connection
+      loop {
+        let Ok(mut connection) = PgConnection::establish(&self.database_url) else {
+          let ten_second = time::Duration::from_secs(10);
+          thread::sleep(ten_second);
+          continue;
+        };
+        //Sucess establist db connection
+        let table_block = BlockTable::new();
+        let table_tranction = TransactionTable::new();
+        let table_transaction_in = TransactionInTable::new();
+        let table_transaction_out = TransactionOutTable::new();
+
+        let table_outpoint_balance = OutpointRuneBalanceTable::new();
+        let table_tranction_rune = TransactionRuneEntryTable::new();
+        let res: Result<(), diesel::result::Error> =
+          connection.build_transaction().read_write().run(|conn| {
+            //must be safe to unwrap;
+            if self.blocks.len() > 0 {
+              table_block.inserts(&self.blocks, conn)?;
+            }
+            if self.transactions.len() > 0 {
+              table_tranction.inserts(&self.transactions, conn)?;
+            }
+            if self.transaction_ins.len() > 0 {
+              table_transaction_in.inserts(&self.transaction_ins, conn)?;
+            }
+            if self.tx_ins.len() > 0 {
+              table_transaction_out.spends(&self.tx_ins, conn)?;
+            }
+            if self.transaction_outs.len() > 0 {
+              table_transaction_out.inserts(&self.transaction_outs, conn)?;
+            }
+            if self.outpoint_balances.len() > 0 {
+              table_outpoint_balance.insert(&self.outpoint_balances, conn)?;
+            }
+            if self.rune_entries.len() > 0 {
+              table_tranction_rune.insert(&self.rune_entries, conn)?;
+            }
+            Ok(())
+          });
+        self.clear();
+        if res.is_err() {
+          log::debug!("Transaction rune index result {:?}", &res);
+          //panic!("Transaction rune index result {:?}", &res);
+        }
+        break;
       }
-      if self.rune_entries.len() > 0 {
-        table_tranction_rune.insert(&self.rune_entries, conn)?;
-      }
-      Ok(())
-    });
-    if res.is_err() {
-      log::debug!("Transaction rune index result {:?}", &res);
-    } else {
-      self.rune_entries.clear();
-      self.outpoint_balances.clear();
     }
-    res
+    Ok(len)
+  }
+  fn clear(&mut self) {
+    self.blocks.clear();
+    self.transactions.clear();
+    self.transaction_ins.clear();
+    self.transaction_outs.clear();
+    self.tx_ins.clear();
+    self.rune_entries.clear();
+    self.outpoint_balances.clear();
   }
 }

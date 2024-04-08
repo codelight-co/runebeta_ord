@@ -41,7 +41,11 @@ pub(crate) struct Updater<'index> {
 }
 
 impl<'index> Updater<'index> {
-  pub(crate) fn update_index(&mut self, mut wtx: WriteTransaction) -> Result {
+  pub(crate) fn update_index(
+    &mut self,
+    mut wtx: WriteTransaction,
+    extension: Arc<Mutex<IndexExtension>>,
+  ) -> Result {
     let start = Instant::now();
     let starting_height = u32::try_from(self.index.client.get_block_count()?).unwrap() + 1;
     let starting_index_height = self.height;
@@ -78,10 +82,20 @@ impl<'index> Updater<'index> {
     let mut uncommitted = 0;
     let mut value_cache = HashMap::new();
     while let Ok(block) = rx.recv() {
+      //
+      let index_inscriptions = self.height >= self.index.first_inscription_height
+        && self.index.settings.index_inscriptions();
+      if index_inscriptions && block.txdata.len() > 0 {
+        //Index block with data only
+        if let Ok(mut extension) = extension.try_lock() {
+          let _res = extension.index_block(self.height as i64, &block.header, &block.txdata);
+        }
+      }
       self.index_block(
         &mut outpoint_sender,
         &mut value_receiver,
         &mut wtx,
+        extension.clone(),
         block,
         &mut value_cache,
       )?;
@@ -101,7 +115,7 @@ impl<'index> Updater<'index> {
       uncommitted += 1;
 
       if uncommitted == self.index.settings.commit_interval() {
-        self.commit(wtx, value_cache)?;
+        self.commit(wtx, extension.clone(), value_cache)?;
         value_cache = HashMap::new();
         uncommitted = 0;
         wtx = self.index.begin_write()?;
@@ -140,7 +154,7 @@ impl<'index> Updater<'index> {
     }
 
     if uncommitted > 0 {
-      self.commit(wtx, value_cache)?;
+      self.commit(wtx, extension.clone(), value_cache)?;
     }
 
     if let Some(progress_bar) = &mut progress_bar {
@@ -309,6 +323,7 @@ impl<'index> Updater<'index> {
     outpoint_sender: &mut Sender<OutPoint>,
     value_receiver: &mut Receiver<u64>,
     wtx: &mut WriteTransaction,
+    extension: Arc<Mutex<IndexExtension>>,
     block: BlockData,
     value_cache: &mut HashMap<OutPoint, u64>,
   ) -> Result<()> {
@@ -335,19 +350,6 @@ impl<'index> Updater<'index> {
 
     let index_inscriptions = self.height >= self.index.first_inscription_height
       && self.index.settings.index_inscriptions();
-
-    //Start add runebeta extension here
-    let extension = IndexExtension::new(
-      self.index.settings.chain(),
-      self.height as i64,
-      block.header.clone(),
-    );
-    if block.txdata.len() > 0 && index_inscriptions {
-      //Index block with data only
-      let _res = extension.index_block(&block.txdata);
-    }
-
-    // End of runebeta extension
 
     if index_inscriptions {
       // Send all missing input outpoints to be fetched right away
@@ -620,17 +622,11 @@ impl<'index> Updater<'index> {
         sequence_number_to_rune_id: &mut sequence_number_to_rune_id,
         statistic_to_count: &mut statistic_to_count,
         transaction_id_to_rune: &mut transaction_id_to_rune,
-        extension: Some(extension), // Add externsion here
+        extension, // Add externsion here
       };
 
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {
         rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid)?;
-      }
-      if let Some(extension) = &mut rune_updater.extension {
-        let commit_res = extension.commit();
-        if commit_res.is_err() {
-          log::debug!("Commit error {:?}", commit_res);
-        }
       }
       rune_updater.update()?;
     }
@@ -714,7 +710,12 @@ impl<'index> Updater<'index> {
     Ok(())
   }
 
-  fn commit(&mut self, wtx: WriteTransaction, value_cache: HashMap<OutPoint, u64>) -> Result {
+  fn commit(
+    &mut self,
+    wtx: WriteTransaction,
+    extension: Arc<Mutex<IndexExtension>>,
+    value_cache: HashMap<OutPoint, u64>,
+  ) -> Result {
     log::info!(
       "Committing at block height {}, {} outputs traversed, {} in map, {} cached",
       self.height,
@@ -754,7 +755,12 @@ impl<'index> Updater<'index> {
     self.sat_ranges_since_flush = 0;
     Index::increment_statistic(&wtx, Statistic::Commits, 1)?;
     wtx.commit()?;
-
+    if let Ok(mut extension) = extension.lock() {
+      let res = extension.commit();
+      if res.is_err() {
+        log::error!("Extension commit err {:?}", &res);
+      }
+    }
     Reorg::update_savepoints(self.index, self.height)?;
 
     Ok(())

@@ -51,8 +51,11 @@ CREATE TABLE transaction_rune_entries (
   rune_id VARCHAR NOT NULL,
   burned NUMERIC(40) NOT NULL,
   divisibility SMALLINT NOT NULL,
+  -- txid
   etching VARCHAR NOT NULL,
+  -- So lan mints, initial with 0
   mints BIGINT NOT NULL,
+  -- zero based index of rune
   number BIGINT NOT NULL,
   -- Mint entry
   mint_entry jsonb DEFAULT '{}'::jsonb NOT NULL,

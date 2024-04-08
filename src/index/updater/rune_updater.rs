@@ -16,7 +16,7 @@ pub(super) struct RuneUpdater<'a, 'tx, 'client> {
   pub(super) sequence_number_to_rune_id: &'a mut Table<'tx, u32, RuneIdValue>,
   pub(super) statistic_to_count: &'a mut Table<'tx, u64, u64>,
   pub(super) transaction_id_to_rune: &'a mut Table<'tx, &'static TxidValue, u128>,
-  pub(super) extension: Option<IndexExtension>,
+  pub(super) extension: Arc<Mutex<IndexExtension>>,
 }
 
 impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
@@ -181,7 +181,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
 
       // Sort balances by id so tests can assert balances in a fixed order
       balances.sort();
-      if let Some(extension) = &mut self.extension {
+      if let Ok(mut extension) = self.extension.try_lock() {
         let _res = extension.index_outpoint_balances(
           &txid,
           vout as i32,
@@ -287,7 +287,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
     /*
      * Taivv April 03, index data to postgres
      */
-    if let Some(extension) = &mut self.extension {
+    if let Ok(mut extension) = self.extension.try_lock() {
       let _ = extension.index_transaction_rune_entry(&txid, &id, &entry);
     }
     self.id_to_entry.insert(id.store(), entry.store())?;

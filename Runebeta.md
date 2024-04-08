@@ -1,10 +1,21 @@
-# Runebeta code
-1. runebeta folder
-2. migrations folder
-3. diesel.toml
-4. run.sh
-5. docker-compose.xml
-7. Cargo.toml
+# Command
+```
+docker-compose --env-file .env up -d
+```
+
+# Runebeta code modified files
+1. Cargo.toml
+2. src/lib.rs
+3. src/index.rs
+4. src/index/updater.rs
+5. src/index/updater/rune_updater.rs
+6. diesel.toml
+7. run.sh
+8. docker-compose.xml
+9. runebeta folder
+10. migrations folder
+
+## Cargo toml
 ```
 # runebeta
 diesel = { version = "2.1", features = ["postgres", "uuid", "serde_json", "numeric"] }
@@ -14,79 +25,94 @@ dotenvy = "0.15"
 # End runebeta
 
 ```
-8. src/lib.rs
+## src/lib.rs
 Add runebeta module
 mod runebeta;
 pub use runebeta::*,
-3. src/index/updater.rs
+
+## src/index.rs
+Add extension instance from the line 624
+```
+  pub fn update(&self) -> Result {
+    loop {
+      let wtx = self.begin_write()?;
+      let extension = Arc::new(Mutex::new(IndexExtension::new(self.settings.chain())));
+      ....
+
+      match updater.update_index(wtx, extension) {
+        ...
+      }
 
 ```
-    // If value_receiver still has values something went wrong with the last block
-    // Could be an assert, shouldn't recover from this and commit the last block
-    let Err(TryRecvError::Empty) = value_receiver.try_recv() else {
-      return Err(anyhow!("Previous block did not consume all input values"));
-    };
+## src/index/updater.rs
 
-    let mut outpoint_to_value = wtx.open_table(OUTPOINT_TO_VALUE)?;
+```
+impl<'index> Updater<'index> {
+  pub(crate) fn update_index(
+    &mut self,
+    mut wtx: WriteTransaction,
+    extension: Arc<Mutex<IndexExtension>>,
+  ) -> Result {
+    ...
 
-    let index_inscriptions = self.height >= self.index.first_inscription_height
-      && self.index.settings.index_inscriptions();
-    
-    
-    //Start add runebeta extension here
-    let extension = IndexExtension::new(
-      self.index.settings.chain(),
-      self.height as i64,
-      block.header.clone(),
-    );
-    if block.txdata.len() > 0 && index_inscriptions {
-      //Index block with data only
-      let _res = extension.index_block(&block.txdata);
+    while let Ok(block) = rx.recv() {
+      //
+      let index_inscriptions = self.height >= self.index.first_inscription_height
+        && self.index.settings.index_inscriptions();
+      if index_inscriptions && block.txdata.len() > 0 {
+        //Index block with data only
+        if let Ok(mut extension) = extension.try_lock() {
+          let _res = extension.index_block(self.height as i64, &block.header, &block.txdata);
+        }
+      }
+      self.index_block(
+        &mut outpoint_sender,
+        &mut value_receiver,
+        &mut wtx,
+        extension.clone(),
+        block,
+        &mut value_cache,
+      )?;
+      ...
+      if uncommitted > 0 {
+        self.commit(wtx, extension.clone(), value_cache)?;
+      }
+
     }
-
-    // End of runebeta extension
-    
 ```
 
 ```
     let mut rune_updater = RuneUpdater {
         ...
-        extension: Some(extension), // Add externsion here
+        extension, // Add externsion here
       };
 ```
 
-4. src/index/updater/rune_updater.rs
+## src/index/updater/rune_updater.rs
 
 ```
   // Sort balances by id so tests can assert balances in a fixed order
   balances.sort();
-
-  if let Some(extension) = &self.extension {
-      let _res = extension.index_outpoint_balances(
-        &txid,
-        vout as i32,
-        &balances
-          .iter()
-          .map(|(rune_id, balance)| (rune_id.clone(), BigDecimal::from(balance.0)))
-          .collect(),
-      );
-    }
+  if let Ok(mut extension) = self.extension.try_lock() {
+    let _res = extension.index_outpoint_balances(
+      &txid,
+      vout as i32,
+      &balances
+        .iter()
+        .map(|(rune_id, balance)| (rune_id.clone(), BigDecimal::from(balance.0)))
+        .collect(),
+    );
+  }
 ```
 
-Line 286
+Line 286 in the function create_rune_entry
 ```
     /*
      * Taivv April 03, index data to postgres
      */
-    if let Some(extension) = &self.extension {
+    if let Ok(mut extension) = self.extension.try_lock() {
       let _ = extension.index_transaction_rune_entry(&txid, &id, &entry);
     }
 
     self.id_to_entry.insert(id.store(), entry.store())?;
-```
-
-5. Run with docker
-
-```
-docker-compose --env-file .env.testnet up -d
 ```

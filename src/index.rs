@@ -624,15 +624,21 @@ impl Index {
   pub fn update(&self) -> Result {
     loop {
       let wtx = self.begin_write()?;
-
+      let extension = Arc::new(Mutex::new(IndexExtension::new(self.settings.chain())));
+      let pg_block_height = extension
+        .lock()
+        .unwrap()
+        .get_indexed_block_height()
+        .unwrap_or_default() as u32;
+      let ordinal_block_height = wtx
+        .open_table(HEIGHT_TO_BLOCK_HEADER)?
+        .range(0..)?
+        .next_back()
+        .transpose()?
+        .map(|(height, _header)| height.value() + 1)
+        .unwrap_or(0);
       let mut updater = Updater {
-        height: wtx
-          .open_table(HEIGHT_TO_BLOCK_HEADER)?
-          .range(0..)?
-          .next_back()
-          .transpose()?
-          .map(|(height, _header)| height.value() + 1)
-          .unwrap_or(0),
+        height: cmp::min(pg_block_height, ordinal_block_height),
         index: self,
         outputs_cached: 0,
         outputs_inserted_since_flush: 0,
@@ -641,7 +647,7 @@ impl Index {
         sat_ranges_since_flush: 0,
       };
 
-      match updater.update_index(wtx) {
+      match updater.update_index(wtx, extension) {
         Ok(ok) => return Ok(ok),
         Err(err) => {
           log::info!("{}", err.to_string());

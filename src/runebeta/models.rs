@@ -176,7 +176,7 @@ pub struct Block {
   pub block_hash: String,
 }
 
-#[derive(AsChangeset, Insertable)]
+#[derive(AsChangeset, Insertable, Debug)]
 #[diesel(table_name = crate::schema::blocks)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewBlock {
@@ -198,7 +198,7 @@ pub struct Transaction {
   pub tx_hash: String,
 }
 
-#[derive(AsChangeset, Insertable)]
+#[derive(AsChangeset, Insertable, Debug)]
 #[diesel(table_name = crate::schema::transactions)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTransaction {
@@ -222,7 +222,7 @@ pub struct TransactionIn {
   pub witness: String,
 }
 
-#[derive(Insertable, AsChangeset)]
+#[derive(Insertable, AsChangeset, Debug)]
 #[diesel(table_name = crate::schema::transaction_ins)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTransactionIn {
