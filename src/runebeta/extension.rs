@@ -21,10 +21,14 @@ use bitcoin::{
 };
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
+use diesel_migrations::{
+  embed_migrations, EmbeddedMigrations, HarnessWithOutput, MigrationHarness,
+};
 use dotenvy::dotenv;
 use ordinals::{Artifact, Runestone};
 use std::fmt::Write;
 use std::{env, thread, time};
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
 #[derive(Debug)]
 pub struct IndexExtension {
@@ -44,6 +48,23 @@ impl IndexExtension {
   pub fn new(chain: Chain) -> Self {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    //Rune db migration
+    loop {
+      println!("Try to connection to db");
+      let Ok(mut connection) = PgConnection::establish(&database_url) else {
+        let ten_second = time::Duration::from_secs(10);
+        thread::sleep(ten_second);
+        continue;
+      };
+      let _res =
+        HarnessWithOutput::write_to_stdout(&mut connection).run_pending_migrations(MIGRATIONS);
+      // if let Ok(migrations) = MIGRATIONS.migrations() {
+      //   for migration in migrations.iter() {
+      //     let _res = migration.run(&mut connection);
+      //   }
+      // }
+      break;
+    }
     Self {
       chain,
       database_url,
