@@ -1133,7 +1133,7 @@ dependencies = [
  "diesel_table_macro_syntax",
  "proc-macro2",
  "quote",
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -1153,7 +1153,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc5557efc453706fed5e4fa85006fe9817c224c3f480a34c7e5959fd700921c5"
 dependencies = [
- "syn 2.0.57",
+ "syn 2.0.58",
 ]
 
 [[package]]
