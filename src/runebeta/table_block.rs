@@ -43,6 +43,7 @@ impl<'conn> BlockTable {
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(blocks::table())
       .values(payload)
+      .on_conflict_do_nothing()
       .returning(Block::as_returning())
       .execute(connection)
   }

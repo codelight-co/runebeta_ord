@@ -16,6 +16,7 @@ impl<'conn> OutpointRuneBalanceTable {
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(outpoint_rune_balances::table())
       .values(balances)
+      .on_conflict_do_nothing()
       //.returning(OutpointRuneBalance::as_returning())
       .execute(connection)
   }

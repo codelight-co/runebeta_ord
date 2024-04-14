@@ -56,8 +56,9 @@ impl IndexExtension {
         thread::sleep(ten_second);
         continue;
       };
-      let _res =
-        HarnessWithOutput::write_to_stdout(&mut connection).run_pending_migrations(MIGRATIONS);
+      let mut harness_with_output = HarnessWithOutput::write_to_stdout(&mut connection);
+      let res = harness_with_output.run_pending_migrations(MIGRATIONS);
+      log::info!("Run migration with result {:?}", &res);
       break;
     }
     Self {
@@ -115,6 +116,7 @@ impl IndexExtension {
       previous_hash: block_header.prev_blockhash.to_string(),
       block_hash: block_header.block_hash().to_string(),
     };
+    log::info!("Index block {}", block_height);
     self.blocks.push(new_block);
     for (tx, txid) in block_data.iter() {
       let artifact = Runestone::decipher(tx);
@@ -342,7 +344,7 @@ impl IndexExtension {
           });
         self.clear();
         if res.is_err() {
-          log::debug!("Transaction rune index result {:?}", &res);
+          log::info!("Transaction rune index result {:?}", &res);
           //panic!("Transaction rune index result {:?}", &res);
         }
         break;

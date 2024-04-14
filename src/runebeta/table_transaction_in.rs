@@ -16,6 +16,7 @@ impl<'conn> TransactionInTable {
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(transaction_ins::table())
       .values(txs)
+      .on_conflict_do_nothing()
       .execute(connection)
   }
 }

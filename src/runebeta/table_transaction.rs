@@ -29,6 +29,7 @@ impl<'conn> TransactionTable {
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(transactions::table())
       .values(txs)
+      .on_conflict_do_nothing()
       .returning(Transaction::as_returning())
       .execute(connection)
   }

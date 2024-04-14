@@ -18,6 +18,7 @@ impl<'conn> TransactionOutTable {
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(transaction_outs::table())
       .values(txs)
+      .on_conflict_do_nothing()
       .execute(connection)
   }
   //Run in the same transaction as txin indexing
