@@ -50,7 +50,7 @@ impl IndexExtension {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     //Rune db migration
     loop {
-      println!("Try to connection to db");
+      log::info!("Try to connection to db");
       let Ok(mut connection) = PgConnection::establish(&database_url) else {
         let ten_second = time::Duration::from_secs(10);
         thread::sleep(ten_second);
@@ -58,11 +58,6 @@ impl IndexExtension {
       };
       let _res =
         HarnessWithOutput::write_to_stdout(&mut connection).run_pending_migrations(MIGRATIONS);
-      // if let Ok(migrations) = MIGRATIONS.migrations() {
-      //   for migration in migrations.iter() {
-      //     let _res = migration.run(&mut connection);
-      //   }
-      // }
       break;
     }
     Self {
@@ -99,15 +94,15 @@ impl IndexExtension {
       return Some(connection);
     }
   }
-  pub fn get_indexed_block_height(&self) -> Result<i64, diesel::result::Error> {
-    if let Some(mut connection) = self.get_connection() {
-      let table_block = BlockTable::new();
-      table_block.get_latest_block_height(&mut connection)
-    } else {
-      log::debug!("Cannot establish connection");
-      Ok(0)
-    }
-  }
+  // pub fn get_indexed_block_height(&self) -> Result<i64, diesel::result::Error> {
+  //   if let Some(mut connection) = self.get_connection() {
+  //     let table_block = BlockTable::new();
+  //     table_block.get_latest_block_height(&mut connection)
+  //   } else {
+  //     log::debug!("Cannot establish connection");
+  //     Ok(0)
+  //   }
+  // }
   pub fn index_block(
     &mut self,
     block_height: i64,
@@ -243,7 +238,7 @@ impl IndexExtension {
     rune_id: &RuneId,
     rune_entry: &RuneEntry,
   ) -> Result<(), diesel::result::Error> {
-    log::debug!("Runebeta index transaction rune {}, rune {}", txid, rune_id);
+    log::info!("Runebeta index transaction rune {}, rune {}", txid, rune_id);
     let tx_rune_entry = NewTxRuneEntry {
       tx_hash: txid.to_string(),
       // rune_height: rune_id.block as i32,
@@ -293,6 +288,15 @@ impl IndexExtension {
     Ok(len)
   }
   pub fn commit(&mut self) -> anyhow::Result<u128> {
+    log::info!(
+      "Commit  cache with {} blocks, {} txs, {} txins, {} txouts, {} outpoint_balances, {} rune entries",
+      self.blocks.len(),
+      self.transactions.len(),
+      self.transaction_ins.len(),
+      self.transaction_outs.len(),
+      self.outpoint_balances.len(),
+      self.rune_entries.len()
+    );
     let len = self.get_cache_size();
     if len > 0 {
       //Try connect to postgres db until successfully establish connection

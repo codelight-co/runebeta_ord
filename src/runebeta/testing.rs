@@ -6,11 +6,43 @@ use bitcoin::{
   hash_types::TxMerkleNode,
   BlockHash, CompactTarget, Transaction, Txid,
 };
+use bitcoincore_rpc::{Auth, Client, RpcApi};
 use hex::FromHex;
 use hyper::body::Buf;
 use ordinals::{Artifact, Etching, RuneId, Runestone, SpacedRune};
 use serde_json::json;
-use std::str::FromStr;
+use std::{env, str::FromStr};
+#[test]
+fn test_rune_entry_index() {
+  let txid =
+    Txid::from_str("c11ee77ecfebc411a6cc171cc7aaafe00f04812264ee62fb040b18decb364279").unwrap();
+  let block_hash =
+    BlockHash::from_str("00000000002f23bfc94f42cc06031b960f7da0ec9ba96c2f744cc5615712ccac").ok();
+  let (Ok(rpc_url), Ok(rpc_username), Ok(rpc_password)) = (
+    env::var("ORD_BITCOIN_RPC_URL"),
+    env::var("ORD_BITCOIN_RPC_USERNAME"),
+    env::var("ORD_BITCOIN_RPC_PASSWORD"),
+  ) else {
+    panic!("Cannot connect to the BITCOIN node");
+  };
+  let rpc = Client::new(rpc_url.as_str(), Auth::UserPass(rpc_username, rpc_password)).unwrap();
+
+  let raw_transaction = rpc.get_raw_transaction_hex(&txid, block_hash.as_ref());
+  assert!(raw_transaction.is_ok());
+  let raw_transaction = raw_transaction.unwrap();
+  println!("{:?}", raw_transaction);
+  let transaction = parse_transaction(raw_transaction.as_str());
+  assert!(transaction.is_ok());
+  let transaction = transaction.unwrap();
+  let artifact = Runestone::decipher(&transaction);
+  let extension = IndexExtension::new(Chain::from_str("testnet").unwrap());
+  let vec_out = extension.index_transaction_output(&txid, &transaction.output, artifact.as_ref());
+  println!("{:?}", &vec_out);
+  assert_eq!(vec_out.len(), 2);
+  let txout = vec_out.get(1).unwrap();
+  assert!(txout.runestone.etching.is_some());
+  assert_eq!(txout.etching, txout.runestone.etching.is_some());
+}
 
 #[test]
 fn test_mintentry_etching() {
