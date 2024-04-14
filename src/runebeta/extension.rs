@@ -30,10 +30,9 @@ use std::fmt::Write;
 use std::{env, thread, time};
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
-#[derive(Debug)]
-pub struct IndexExtension {
-  chain: Chain,
-  database_url: String,
+#[derive(Debug, Default)]
+pub struct IndexBlock {
+  block_height: u64,
   // Raw txin for update previous txouts'spent => true
   tx_ins: Vec<(Txid, i64)>,
   blocks: Vec<NewBlock>,
@@ -43,6 +42,38 @@ pub struct IndexExtension {
   //Store outpoint banlance in each rune update
   outpoint_balances: Vec<NewOutpointRuneBalance>,
   rune_entries: Vec<NewTxRuneEntry>,
+}
+impl IndexBlock {
+  pub fn new(height: u64) -> Self {
+    Self {
+      block_height: height,
+      ..Default::default()
+    }
+  }
+  pub fn get_size(&self) -> u128 {
+    self.blocks.len() as u128
+      + self.transactions.len() as u128
+      + self.transaction_ins.len() as u128
+      + self.transaction_outs.len() as u128
+      + self.outpoint_balances.len() as u128
+      + self.rune_entries.len() as u128
+      + self.tx_ins.len() as u128
+  }
+  fn _clear(&mut self) {
+    self.blocks.clear();
+    self.transactions.clear();
+    self.transaction_ins.clear();
+    self.transaction_outs.clear();
+    self.tx_ins.clear();
+    self.rune_entries.clear();
+    self.outpoint_balances.clear();
+  }
+}
+#[derive(Debug)]
+pub struct IndexExtension {
+  chain: Chain,
+  database_url: String,
+  index_cache: Vec<IndexBlock>,
 }
 impl IndexExtension {
   pub fn new(chain: Chain) -> Self {
@@ -64,24 +95,10 @@ impl IndexExtension {
     Self {
       chain,
       database_url,
-      tx_ins: vec![],
-      blocks: vec![],
-      transactions: vec![],
-      transaction_ins: vec![],
-      transaction_outs: vec![],
-      outpoint_balances: vec![],
-      rune_entries: vec![],
+      index_cache: Default::default(),
     }
   }
-  pub fn get_cache_size(&self) -> u128 {
-    self.blocks.len() as u128
-      + self.transactions.len() as u128
-      + self.transaction_ins.len() as u128
-      + self.transaction_outs.len() as u128
-      + self.outpoint_balances.len() as u128
-      + self.rune_entries.len() as u128
-      + self.tx_ins.len() as u128
-  }
+
   /*
    * Loop until successfull establish connection
    */
@@ -95,6 +112,17 @@ impl IndexExtension {
       return Some(connection);
     }
   }
+  ///
+  ///
+  pub fn get_block_cache(&mut self, height: u64) -> Option<&mut IndexBlock> {
+    for cache in self.index_cache.iter_mut() {
+      if cache.block_height == height {
+        //get existing cache
+        return Some(cache);
+      }
+    }
+    None
+  }
   // pub fn get_indexed_block_height(&self) -> Result<i64, diesel::result::Error> {
   //   if let Some(mut connection) = self.get_connection() {
   //     let table_block = BlockTable::new();
@@ -106,18 +134,23 @@ impl IndexExtension {
   // }
   pub fn index_block(
     &mut self,
-    block_height: i64,
+    height: i64,
     block_header: &Header,
     block_data: &Vec<(Transaction, Txid)>,
   ) -> Result<(), diesel::result::Error> {
+    log::info!("Index block {}", &height);
     let new_block = NewBlock {
       block_time: block_header.time as i64,
-      block_height,
+      block_height: height,
       previous_hash: block_header.prev_blockhash.to_string(),
       block_hash: block_header.block_hash().to_string(),
     };
-    log::info!("Index block {}", block_height);
-    self.blocks.push(new_block);
+
+    let mut transactions = vec![];
+    let mut transaction_outs = vec![];
+    let mut transaction_ins: Vec<NewTransactionIn> = vec![];
+    let mut tx_ins = vec![];
+
     for (tx, txid) in block_data.iter() {
       let artifact = Runestone::decipher(tx);
       let Transaction {
@@ -128,13 +161,13 @@ impl IndexExtension {
       } = tx;
       let new_transaction = NewTransaction {
         version: *version,
-        block_height,
+        block_height: height,
         lock_time: lock_time.to_consensus_u32() as i32,
         tx_hash: txid.to_string(),
       };
-      self.transactions.push(new_transaction);
+      transactions.push(new_transaction);
       input.iter().for_each(|tx_in| {
-        self.tx_ins.push((
+        tx_ins.push((
           tx_in.previous_output.txid.clone(),
           tx_in.previous_output.vout as i64,
         ))
@@ -158,11 +191,21 @@ impl IndexExtension {
           }
         })
         .collect();
-      self.transaction_ins.append(&mut new_transaction_ins);
+      transaction_ins.append(&mut new_transaction_ins);
       //Create transaction out for each transaction then push to common vector for whole block
       let mut new_transaction_outs = self.index_transaction_output(txid, output, artifact.as_ref());
-      self.transaction_outs.append(&mut new_transaction_outs);
+      transaction_outs.append(&mut new_transaction_outs);
     }
+    let index_block = IndexBlock {
+      block_height: height as u64,
+      tx_ins,
+      blocks: vec![new_block],
+      transactions,
+      transaction_ins,
+      transaction_outs,
+      ..Default::default()
+    };
+    self.index_cache.push(index_block);
     Ok(())
   }
   pub fn index_transaction_output(
@@ -264,7 +307,15 @@ impl IndexExtension {
         .unwrap_or_default(),
       turbo: rune_entry.turbo,
     };
-    self.rune_entries.push(tx_rune_entry);
+    let height = rune_id.block.clone();
+    let index_block = match self.get_block_cache(height as u64) {
+      Some(cache) => cache,
+      None => {
+        self.index_cache.push(IndexBlock::new(height as u64));
+        self.index_cache.last_mut().unwrap()
+      }
+    };
+    index_block.rune_entries.push(tx_rune_entry);
     Ok(())
   }
 
@@ -274,32 +325,31 @@ impl IndexExtension {
     vout: i32,
     balances: &Vec<(RuneId, BigDecimal)>,
   ) -> Result<usize, diesel::result::Error> {
-    log::debug!("Runebeta index outpoint balances of transaction {}", txid);
-
-    let mut outpoint_balances = balances
-      .iter()
-      .map(|(rune_id, balance)| NewOutpointRuneBalance {
+    log::info!("Runebeta index outpoint balances of transaction {}", txid);
+    let mut len = 0;
+    balances.iter().for_each(|(rune_id, balance)| {
+      let height = rune_id.block.clone();
+      let index_block = match self.get_block_cache(height as u64) {
+        Some(cache) => cache,
+        None => {
+          self.index_cache.push(IndexBlock::new(height));
+          self.index_cache.last_mut().unwrap()
+        }
+      };
+      let outpoint_balance = NewOutpointRuneBalance {
         tx_hash: txid.to_string(),
         vout,
         rune_id: rune_id.to_string(),
         balance_value: balance.clone(),
-      })
-      .collect::<Vec<NewOutpointRuneBalance>>();
-    let len = outpoint_balances.len();
-    self.outpoint_balances.append(&mut outpoint_balances);
+      };
+      len = len + 1;
+      index_block.outpoint_balances.push(outpoint_balance);
+    });
     Ok(len)
   }
-  pub fn commit(&mut self) -> anyhow::Result<u128> {
-    log::info!(
-      "Commit  cache with {} blocks, {} txs, {} txins, {} txouts, {} outpoint_balances, {} rune entries",
-      self.blocks.len(),
-      self.transactions.len(),
-      self.transaction_ins.len(),
-      self.transaction_outs.len(),
-      self.outpoint_balances.len(),
-      self.rune_entries.len()
-    );
-    let len = self.get_cache_size();
+  pub fn commit(&mut self) -> anyhow::Result<usize> {
+    let len = self.index_cache.len();
+    log::info!("Commit cache for {} blocks", len);
     if len > 0 {
       //Try connect to postgres db until successfully establish connection
       loop {
@@ -316,49 +366,52 @@ impl IndexExtension {
 
         let table_outpoint_balance = OutpointRuneBalanceTable::new();
         let table_tranction_rune = TransactionRuneEntryTable::new();
-        let res: Result<(), diesel::result::Error> =
-          connection.build_transaction().read_write().run(|conn| {
-            //must be safe to unwrap;
-            if self.blocks.len() > 0 {
-              table_block.inserts(&self.blocks, conn)?;
-            }
-            if self.transactions.len() > 0 {
-              table_tranction.inserts(&self.transactions, conn)?;
-            }
-            if self.transaction_ins.len() > 0 {
-              table_transaction_in.inserts(&self.transaction_ins, conn)?;
-            }
-            if self.tx_ins.len() > 0 {
-              table_transaction_out.spends(&self.tx_ins, conn)?;
-            }
-            if self.transaction_outs.len() > 0 {
-              table_transaction_out.inserts(&self.transaction_outs, conn)?;
-            }
-            if self.outpoint_balances.len() > 0 {
-              table_outpoint_balance.insert(&self.outpoint_balances, conn)?;
-            }
-            if self.rune_entries.len() > 0 {
-              table_tranction_rune.insert(&self.rune_entries, conn)?;
-            }
-            Ok(())
-          });
-        self.clear();
-        if res.is_err() {
-          log::info!("Transaction rune index result {:?}", &res);
-          //panic!("Transaction rune index result {:?}", &res);
-        }
+        self.index_cache.iter().for_each(|cache| {
+          let res: Result<(), diesel::result::Error> =
+            connection.build_transaction().read_write().run(|conn| {
+              log::info!(
+                "Commit cache {} with {} blocks, {} txs, {} txins, {} txouts, {} outpoint_balances, {} rune entries",
+                cache.block_height,
+                cache.blocks.len(),
+                cache.transactions.len(),
+                cache.transaction_ins.len(),
+                cache.transaction_outs.len(),
+                cache.outpoint_balances.len(),
+                cache.rune_entries.len()
+              );
+              //must be safe to unwrap;
+              if cache.blocks.len() > 0 {
+                table_block.inserts(&cache.blocks, conn)?;
+              }
+              if cache.transactions.len() > 0 {
+                table_tranction.inserts(&cache.transactions, conn)?;
+              }
+              if cache.transaction_ins.len() > 0 {
+                table_transaction_in.inserts(&cache.transaction_ins, conn)?;
+              }
+              if cache.tx_ins.len() > 0 {
+                table_transaction_out.spends(&cache.tx_ins, conn)?;
+              }
+              if cache.transaction_outs.len() > 0 {
+                table_transaction_out.inserts(&cache.transaction_outs, conn)?;
+              }
+              if cache.outpoint_balances.len() > 0 {
+                table_outpoint_balance.insert(&cache.outpoint_balances, conn)?;
+              }
+              if cache.rune_entries.len() > 0 {
+                table_tranction_rune.insert(&cache.rune_entries, conn)?;
+              }
+              Ok(())
+            });
+          if res.is_err() {
+            log::info!("Transaction index result {:?}", &res);
+            //panic!("Transaction index result {:?}", &res);
+          }
+        });
+        self.index_cache.clear();
         break;
       }
     }
     Ok(len)
-  }
-  fn clear(&mut self) {
-    self.blocks.clear();
-    self.transactions.clear();
-    self.transaction_ins.clear();
-    self.transaction_outs.clear();
-    self.tx_ins.clear();
-    self.rune_entries.clear();
-    self.outpoint_balances.clear();
   }
 }
