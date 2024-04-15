@@ -2,6 +2,7 @@ use diesel::{associations::HasTable, PgConnection, RunQueryDsl};
 
 use crate::runebeta::models::TransactionRune;
 use crate::schema::txid_runes::dsl::*;
+pub const NUMBER_OF_FIELDS: u16 = 3;
 #[derive(Clone)]
 pub struct TransactionRuneTable {}
 

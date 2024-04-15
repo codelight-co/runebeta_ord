@@ -3,7 +3,7 @@ use diesel::{associations::HasTable, ExpressionMethods, PgConnection, RunQueryDs
 
 use super::models::NewTransactionOut;
 use crate::schema::transaction_outs::dsl::*;
-
+pub const NUMBER_OF_FIELDS: u16 = 15;
 #[derive(Clone)]
 pub struct TransactionOutTable {}
 
@@ -13,7 +13,7 @@ impl<'conn> TransactionOutTable {
   }
   pub fn inserts(
     &self,
-    txs: &Vec<NewTransactionOut>,
+    txs: &[NewTransactionOut],
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(transaction_outs::table())

@@ -1,10 +1,11 @@
 use diesel::{
   associations::HasTable, ExpressionMethods, OptionalExtension, PgConnection, QueryDsl,
-  RunQueryDsl, SelectableHelper,
+  RunQueryDsl, SelectableHelper, Table,
 };
 
 use super::models::{Block, NewBlock};
 use crate::schema::blocks::dsl::*;
+pub const NUMBER_OF_FIELDS: u16 = 5;
 #[derive(Clone)]
 pub struct BlockTable {}
 
@@ -38,7 +39,7 @@ impl<'conn> BlockTable {
   }
   pub fn inserts(
     &self,
-    payload: &Vec<NewBlock>,
+    payload: &[NewBlock],
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(blocks::table())

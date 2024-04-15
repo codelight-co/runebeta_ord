@@ -6,6 +6,8 @@ use crate::schema::transaction_rune_entries::dsl::*;
 use crate::{RuneEntry, RuneId};
 
 use super::models::{MintEntryType, NewTxRuneEntry};
+pub const NUMBER_OF_FIELDS: u16 = 17;
+
 #[derive(Clone)]
 pub struct TransactionRuneEntryTable {}
 
@@ -13,9 +15,9 @@ impl<'conn> TransactionRuneEntryTable {
   pub fn new() -> Self {
     Self {}
   }
-  pub fn insert(
+  pub fn inserts(
     &self,
-    entries: &Vec<NewTxRuneEntry>,
+    entries: &[NewTxRuneEntry],
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(transaction_rune_entries::table())

@@ -381,25 +381,49 @@ impl IndexExtension {
               );
               //must be safe to unwrap;
               if cache.blocks.len() > 0 {
-                table_block.inserts(&cache.blocks, conn)?;
+                let chunk_size = (u16::MAX / super::table_block::NUMBER_OF_FIELDS) as usize;
+                let chunks = cache.blocks.chunks(chunk_size);
+                for chunk in chunks {
+                  table_block.inserts(chunk, conn)?;
+                }
               }
               if cache.transactions.len() > 0 {
-                table_tranction.inserts(&cache.transactions, conn)?;
+                let chunk_size = (u16::MAX / super::table_transaction::NUMBER_OF_FIELDS) as usize;
+                let chunks = cache.transactions.chunks(chunk_size);
+                for chunk in chunks {
+                  table_tranction.inserts(chunk, conn)?;
+                }
               }
               if cache.transaction_ins.len() > 0 {
-                table_transaction_in.inserts(&cache.transaction_ins, conn)?;
+                let chunk_size = u16::MAX / super::table_transaction_in::NUMBER_OF_FIELDS;
+                let chunks = cache.transaction_ins.chunks(chunk_size as usize);
+                for chunk in chunks {
+                  table_transaction_in.inserts(chunk, conn)?;
+                }
               }
               if cache.tx_ins.len() > 0 {
                 table_transaction_out.spends(&cache.tx_ins, conn)?;
               }
               if cache.transaction_outs.len() > 0 {
-                table_transaction_out.inserts(&cache.transaction_outs, conn)?;
+                let chunk_size = u16::MAX / super::table_transaction_out::NUMBER_OF_FIELDS;
+                let chunks = cache.transaction_outs.chunks(chunk_size as usize);
+                for chunk in chunks {
+                  table_transaction_out.inserts(chunk, conn)?;
+                }
               }
               if cache.outpoint_balances.len() > 0 {
-                table_outpoint_balance.insert(&cache.outpoint_balances, conn)?;
+                let chunk_size = u16::MAX / super::table_outpoint_rune_balance::NUMBER_OF_FIELDS;
+                let chunks = cache.outpoint_balances.chunks(chunk_size as usize);
+                for chunk in chunks {
+                  table_outpoint_balance.insert(chunk, conn)?;
+                }
               }
               if cache.rune_entries.len() > 0 {
-                table_tranction_rune.insert(&cache.rune_entries, conn)?;
+                let chunk_size = u16::MAX / super::table_transaction_rune_entry::NUMBER_OF_FIELDS;
+                let chunks = cache.rune_entries.chunks(chunk_size as usize);
+                for chunk in chunks {
+                  table_tranction_rune.inserts(chunk, conn)?;
+                }
               }
               Ok(())
             });
