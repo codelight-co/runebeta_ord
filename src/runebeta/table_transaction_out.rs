@@ -2,7 +2,7 @@ use bitcoin::{TxIn, Txid};
 use diesel::{associations::HasTable, ExpressionMethods, PgConnection, RunQueryDsl};
 
 use super::models::NewTransactionOut;
-use crate::schema::transaction_outs::dsl::*;
+use crate::{schema::transaction_outs::dsl::*, InsertRecords};
 pub const NUMBER_OF_FIELDS: u16 = 15;
 #[derive(Clone)]
 pub struct TransactionOutTable {}
@@ -50,5 +50,20 @@ impl<'conn> TransactionOutTable {
         .execute(connection)?;
     }
     Ok(txins.len())
+  }
+}
+
+impl InsertRecords for TransactionOutTable {
+  const CHUNK_SIZE: usize = (u16::MAX / NUMBER_OF_FIELDS) as usize;
+  type Record = NewTransactionOut;
+  fn insert_slice(
+    &self,
+    records: &[Self::Record],
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    diesel::insert_into(transaction_outs::table())
+      .values(records)
+      .on_conflict_do_nothing()
+      .execute(connection)
   }
 }

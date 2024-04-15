@@ -242,7 +242,7 @@ pub struct TransactionOut {
   pub id: i64,
   pub tx_hash: String,
   pub vout: i64,
-  pub value: i64,
+  pub value: BigDecimal,
   pub asm: String,
   pub dust_value: i64,
   pub address: Option<String>,
@@ -262,7 +262,7 @@ pub struct TransactionOut {
 pub struct NewTransactionOut {
   pub tx_hash: String,
   pub vout: i64,
-  pub value: i64,
+  pub value: BigDecimal,
   pub asm: String,
   pub dust_value: i64,
   pub address: Option<String>,

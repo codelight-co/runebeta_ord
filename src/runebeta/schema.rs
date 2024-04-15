@@ -37,7 +37,7 @@ diesel::table! {
         id -> Int8,
         tx_hash -> Varchar,
         vout -> Int8,
-        value -> Int8,
+        value -> Numeric,
         asm -> Varchar,
         dust_value -> Int8,
         address -> Nullable<Varchar>,

@@ -3,7 +3,7 @@ use crate::{
     models::{MintEntryType, NewOutpointRuneBalance},
     OutpointRuneBalanceTable,
   },
-  Chain, RuneEntry, RuneId,
+  Chain, InsertRecords, RuneEntry, RuneId,
 };
 
 use super::{
@@ -26,7 +26,7 @@ use diesel_migrations::{
 };
 use dotenvy::dotenv;
 use ordinals::{Artifact, Runestone};
-use std::fmt::Write;
+use std::{collections::VecDeque, fmt::Write};
 use std::{env, thread, time};
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
@@ -73,7 +73,7 @@ impl IndexBlock {
 pub struct IndexExtension {
   chain: Chain,
   database_url: String,
-  index_cache: Vec<IndexBlock>,
+  index_cache: VecDeque<IndexBlock>,
 }
 impl IndexExtension {
   pub fn new(chain: Chain) -> Self {
@@ -205,7 +205,7 @@ impl IndexExtension {
       transaction_outs,
       ..Default::default()
     };
-    self.index_cache.push(index_block);
+    self.index_cache.push_back(index_block);
     Ok(())
   }
   pub fn index_transaction_output(
@@ -259,7 +259,7 @@ impl IndexExtension {
         NewTransactionOut {
           tx_hash: txid.to_string(),
           vout: index as i64,
-          value: tx_out.value as i64,
+          value: BigDecimal::from(tx_out.value),
           address,
           asm,
           dust_value,
@@ -311,8 +311,8 @@ impl IndexExtension {
     let index_block = match self.get_block_cache(height as u64) {
       Some(cache) => cache,
       None => {
-        self.index_cache.push(IndexBlock::new(height as u64));
-        self.index_cache.last_mut().unwrap()
+        self.index_cache.push_back(IndexBlock::new(height as u64));
+        self.index_cache.back_mut().unwrap()
       }
     };
     index_block.rune_entries.push(tx_rune_entry);
@@ -332,8 +332,8 @@ impl IndexExtension {
       let index_block = match self.get_block_cache(height as u64) {
         Some(cache) => cache,
         None => {
-          self.index_cache.push(IndexBlock::new(height));
-          self.index_cache.last_mut().unwrap()
+          self.index_cache.push_back(IndexBlock::new(height));
+          self.index_cache.back_mut().unwrap()
         }
       };
       let outpoint_balance = NewOutpointRuneBalance {
@@ -366,7 +366,7 @@ impl IndexExtension {
 
         let table_outpoint_balance = OutpointRuneBalanceTable::new();
         let table_tranction_rune = TransactionRuneEntryTable::new();
-        self.index_cache.iter().for_each(|cache| {
+        let transactional_insert = |cache: &IndexBlock| {
           let res: Result<(), diesel::result::Error> =
             connection.build_transaction().read_write().run(|conn| {
               log::info!(
@@ -380,58 +380,41 @@ impl IndexExtension {
                 cache.rune_entries.len()
               );
               //must be safe to unwrap;
-              if cache.blocks.len() > 0 {
-                let chunk_size = (u16::MAX / super::table_block::NUMBER_OF_FIELDS) as usize;
-                let chunks = cache.blocks.chunks(chunk_size);
-                for chunk in chunks {
-                  let res = table_block.inserts(chunk, conn);
-                  if res.is_err() {
-                    log::info!("Insert blocks error {:?}", &res);
-                    res?;
-                  }
-                }
+              let res = table_block.insert_vector(&cache.blocks, conn);
+              if res.is_err() {
+                log::info!("Insert blocks error {:?}", &res);
+                res?;
               }
-              if cache.transactions.len() > 0 {
-                let chunk_size = (u16::MAX / super::table_transaction::NUMBER_OF_FIELDS) as usize;
-                let chunks = cache.transactions.chunks(chunk_size);
-                for chunk in chunks {
-                  let res = table_tranction.inserts(chunk, conn);
-                  if res.is_err() {
-                    log::info!("Insert transactions error {:?}", &res);
-                    res?;
-                  }
-                }
+              let res = table_tranction.insert_vector(&cache.transactions, conn);
+              if res.is_err() {
+                log::info!("Insert transactions error {:?}", &res);
+                res?;
               }
-              if cache.transaction_ins.len() > 0 {
-                let chunk_size = u16::MAX / super::table_transaction_in::NUMBER_OF_FIELDS;
-                let chunks = cache.transaction_ins.chunks(chunk_size as usize);
-                for chunk in chunks {
-                  table_transaction_in.inserts(chunk, conn)?;
-                }
+              let res = table_transaction_in.insert_vector(&cache.transaction_ins, conn);
+              if res.is_err() {
+                log::info!("Insert transaction ins error {:?}", &res);
+                res?;
               }
+              let res = table_transaction_out.insert_vector(&cache.transaction_outs, conn);
+              if res.is_err() {
+                log::info!("Insert transaction outs error {:?}", &res);
+                res?;
+              }
+
               if cache.tx_ins.len() > 0 {
                 table_transaction_out.spends(&cache.tx_ins, conn)?;
               }
-              if cache.transaction_outs.len() > 0 {
-                let chunk_size = u16::MAX / super::table_transaction_out::NUMBER_OF_FIELDS;
-                let chunks = cache.transaction_outs.chunks(chunk_size as usize);
-                for chunk in chunks {
-                  table_transaction_out.inserts(chunk, conn)?;
-                }
+
+              let res = table_outpoint_balance.insert_vector(&cache.outpoint_balances, conn);
+              if res.is_err() {
+                log::info!("Insert outpoint balances error {:?}", &res);
+                res?;
               }
-              if cache.outpoint_balances.len() > 0 {
-                let chunk_size = u16::MAX / super::table_outpoint_rune_balance::NUMBER_OF_FIELDS;
-                let chunks = cache.outpoint_balances.chunks(chunk_size as usize);
-                for chunk in chunks {
-                  table_outpoint_balance.insert(chunk, conn)?;
-                }
-              }
-              if cache.rune_entries.len() > 0 {
-                let chunk_size = u16::MAX / super::table_transaction_rune_entry::NUMBER_OF_FIELDS;
-                let chunks = cache.rune_entries.chunks(chunk_size as usize);
-                for chunk in chunks {
-                  table_tranction_rune.inserts(chunk, conn)?;
-                }
+              
+              let res = table_tranction_rune.insert_vector(&cache.rune_entries, conn);
+              if res.is_err() {
+                log::info!("Insert rune entries error {:?}", &res);
+                res?;
               }
               Ok(())
             });
@@ -439,7 +422,49 @@ impl IndexExtension {
             log::info!("Transaction index result {:?}", &res);
             //panic!("Transaction index result {:?}", &res);
           }
-        });
+        };
+        //Insert records in transactional manner for each block
+        //self.index_cache.iter().for_each(transactional_insert);
+        //Insert all records without transactional
+        //Insert into blocks
+        let mut total_blocks = vec![];
+        let mut total_transactions = vec![];
+        let mut total_transaction_ins = vec![];
+        let mut total_transaction_outs = vec![];
+        let mut total_outpoint_balances = vec![];
+        let mut total_transaction_runes = vec![];
+        let mut total_tx_ins = vec![];
+        loop {
+          let Some(IndexBlock {
+            block_height: _,
+            tx_ins,
+            blocks,
+            transactions,
+            transaction_ins,
+            transaction_outs,
+            outpoint_balances,
+            rune_entries,
+          }) = self.index_cache.pop_front()
+          else {
+            break;
+          };
+          total_blocks.extend(blocks);
+          total_transactions.extend(transactions);
+          total_transaction_ins.extend(transaction_ins);
+          total_transaction_outs.extend(transaction_outs);
+          total_outpoint_balances.extend(outpoint_balances);
+          total_transaction_runes.extend(rune_entries);
+          total_tx_ins.extend(tx_ins);
+        }
+        let _res = table_block.insert_vector(&total_blocks, &mut connection);
+        let _res = table_tranction.insert_vector(&total_transactions, &mut connection);
+        let _res = table_transaction_in.insert_vector(&total_transaction_ins, &mut connection);
+        let _res = table_transaction_out.insert_vector(&total_transaction_outs, &mut connection);
+        let _res = table_outpoint_balance.insert_vector(&total_outpoint_balances, &mut connection);
+        let _res = table_tranction_rune.insert_vector(&total_transaction_runes, &mut connection);
+        if total_tx_ins.len() > 0 {
+          table_transaction_out.spends(&total_tx_ins, &mut connection)?;
+        }
         self.index_cache.clear();
         break;
       }
