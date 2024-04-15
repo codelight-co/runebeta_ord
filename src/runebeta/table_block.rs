@@ -1,6 +1,6 @@
 use diesel::{
   associations::HasTable, ExpressionMethods, OptionalExtension, PgConnection, QueryDsl,
-  RunQueryDsl, SelectableHelper, Table,
+  RunQueryDsl, SelectableHelper,
 };
 
 use super::models::{Block, NewBlock};

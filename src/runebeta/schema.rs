@@ -14,7 +14,7 @@ diesel::table! {
     outpoint_rune_balances (id) {
         id -> Int8,
         tx_hash -> Varchar,
-        vout -> Int4,
+        vout -> Int8,
         rune_id -> Varchar,
         balance_value -> Numeric,
     }
@@ -25,7 +25,7 @@ diesel::table! {
         id -> Int8,
         tx_hash -> Varchar,
         previous_output_hash -> Varchar,
-        previous_output_vout -> Int4,
+        previous_output_vout -> Int8,
         script_sig -> Text,
         sequence_number -> Int8,
         witness -> Text,

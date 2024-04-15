@@ -216,7 +216,7 @@ pub struct TransactionIn {
   pub id: i64,
   pub tx_hash: String,
   pub previous_output_hash: String,
-  pub previous_output_vout: i32,
+  pub previous_output_vout: i64,
   pub script_sig: String,
   pub sequence_number: i64,
   pub witness: String,
@@ -228,7 +228,7 @@ pub struct TransactionIn {
 pub struct NewTransactionIn {
   pub tx_hash: String,
   pub previous_output_hash: String,
-  pub previous_output_vout: i32,
+  pub previous_output_vout: i64,
   pub script_sig: String,
   pub sequence_number: i64,
   pub witness: String,
@@ -371,7 +371,7 @@ pub struct NewTransactionRuneAddress {
 pub struct OutpointRuneBalance {
   pub id: i64,
   pub tx_hash: String,
-  pub vout: i32,
+  pub vout: i64,
   pub rune_id: String,
   pub balance_value: BigDecimal,
 }
@@ -380,7 +380,7 @@ pub struct OutpointRuneBalance {
 #[diesel(table_name = crate::schema::outpoint_rune_balances)]
 pub struct NewOutpointRuneBalance {
   pub tx_hash: String,
-  pub vout: i32,
+  pub vout: i64,
   pub rune_id: String,
   pub balance_value: BigDecimal,
 }

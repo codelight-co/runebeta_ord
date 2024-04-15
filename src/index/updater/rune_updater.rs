@@ -184,7 +184,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
       if let Ok(mut extension) = self.extension.try_lock() {
         let _res = extension.index_outpoint_balances(
           &txid,
-          vout as i32,
+          vout as i64,
           &balances
             .iter()
             .map(|(rune_id, balance)| (rune_id.clone(), BigDecimal::from(balance.0)))

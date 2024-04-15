@@ -184,7 +184,7 @@ impl IndexExtension {
           NewTransactionIn {
             tx_hash: txid.to_string(),
             previous_output_hash: txin.previous_output.txid.to_string(),
-            previous_output_vout: txin.previous_output.vout as i32,
+            previous_output_vout: txin.previous_output.vout as i64,
             script_sig: txin.script_sig.to_hex_string(),
             sequence_number: txin.sequence.0 as i64,
             witness,
@@ -322,7 +322,7 @@ impl IndexExtension {
   pub fn index_outpoint_balances(
     &mut self,
     txid: &Txid,
-    vout: i32,
+    vout: i64,
     balances: &Vec<(RuneId, BigDecimal)>,
   ) -> Result<usize, diesel::result::Error> {
     log::info!("Runebeta index outpoint balances of transaction {}", txid);
