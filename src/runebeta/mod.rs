@@ -13,5 +13,6 @@ pub use table_outpoint_rune_balance::OutpointRuneBalanceTable;
 pub use table_transaction_in::TransactionInTable;
 pub use table_transaction_out::TransactionOutTable;
 pub use table_transaction_rune_entry::TransactionRuneEntryTable;
+pub const FIRST_RUNE_BLOCK_HEIGHT: u32 = 2583205;
 #[cfg(test)]
 mod testing;

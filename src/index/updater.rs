@@ -82,6 +82,10 @@ impl<'index> Updater<'index> {
     let mut uncommitted = 0;
     let mut value_cache = HashMap::new();
     while let Ok(block) = rx.recv() {
+      //Index to fist rune
+      if self.height == FIRST_RUNE_BLOCK_HEIGHT {
+        break;
+      }
       //
       let index_inscriptions = self.height >= self.index.first_inscription_height
         && self.index.settings.index_inscriptions();
