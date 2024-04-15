@@ -17,6 +17,7 @@ impl<'conn> TransactionRuneIdAddressTable {
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(txid_rune_addresss::table())
       .values(txs)
+      .on_conflict_do_nothing()
       .execute(connection)
   }
 }

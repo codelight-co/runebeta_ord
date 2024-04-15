@@ -22,6 +22,7 @@ impl<'conn> TransactionRuneEntryTable {
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(transaction_rune_entries::table())
       .values(entries)
+      .on_conflict_do_nothing()
       //.returning(OutpointRuneBalance::as_returning())
       .execute(connection)
   }
@@ -59,6 +60,7 @@ impl<'conn> TransactionRuneEntryTable {
     };
     diesel::insert_into(transaction_rune_entries::table())
       .values(tx_rune_entry)
+      .on_conflict_do_nothing()
       .execute(connection)
   }
 }
