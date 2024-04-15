@@ -26,7 +26,7 @@ use diesel_migrations::{
 };
 use dotenvy::dotenv;
 use ordinals::{Artifact, Runestone};
-use std::{collections::VecDeque, fmt::Write};
+use std::{collections::VecDeque, fmt::Write, time::Instant};
 use std::{env, thread, time};
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
@@ -349,7 +349,7 @@ impl IndexExtension {
   }
   pub fn commit(&mut self) -> anyhow::Result<usize> {
     let len = self.index_cache.len();
-    log::info!("Commit cache for {} blocks", len);
+    // log::info!("Commit cache for {} blocks", len);
     if len > 0 {
       //Try connect to postgres db until successfully establish connection
       loop {
@@ -456,14 +456,35 @@ impl IndexExtension {
           total_transaction_runes.extend(rune_entries);
           total_tx_ins.extend(tx_ins);
         }
+        let mut start = Instant::now();
         let _res = table_block.insert_vector(&total_blocks, &mut connection);
+        log::info!(
+            "Inserted {} blocks in {} ms", total_blocks.len(), start.elapsed().as_millis());
+        start = Instant::now();    
         let _res = table_tranction.insert_vector(&total_transactions, &mut connection);
+        log::info!(
+            "Inserted {} transactions in {} ms", total_transactions.len(), start.elapsed().as_millis());
+        start = Instant::now();
         let _res = table_transaction_in.insert_vector(&total_transaction_ins, &mut connection);
+        log::info!(
+            "Inserted {} txins in {} ms", total_transaction_ins.len(), start.elapsed().as_millis());
+        start = Instant::now();
         let _res = table_transaction_out.insert_vector(&total_transaction_outs, &mut connection);
+        log::info!(
+            "Inserted {} txouts in {} ms", total_transaction_outs.len(), start.elapsed().as_millis());
+        start = Instant::now();
         let _res = table_outpoint_balance.insert_vector(&total_outpoint_balances, &mut connection);
+        log::info!(
+            "Inserted {} outpoint balances in {} ms", total_outpoint_balances.len(), start.elapsed().as_millis());
+        start = Instant::now();
         let _res = table_tranction_rune.insert_vector(&total_transaction_runes, &mut connection);
+        log::info!(
+            "Inserted {} runes {} ms", total_transaction_runes.len(), start.elapsed().as_millis());
         if total_tx_ins.len() > 0 {
+          start = Instant::now();
           table_transaction_out.spends(&total_tx_ins, &mut connection)?;
+          log::info!(
+            "Update {} spent txout {} ms", total_tx_ins.len(), start.elapsed().as_millis());
         }
         self.index_cache.clear();
         break;
