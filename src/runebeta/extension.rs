@@ -162,7 +162,7 @@ impl IndexExtension {
       let new_transaction = NewTransaction {
         version: *version,
         block_height: height,
-        lock_time: lock_time.to_consensus_u32() as i32,
+        lock_time: lock_time.to_consensus_u32() as i64,
         tx_hash: txid.to_string(),
       };
       transactions.push(new_transaction);
@@ -384,14 +384,22 @@ impl IndexExtension {
                 let chunk_size = (u16::MAX / super::table_block::NUMBER_OF_FIELDS) as usize;
                 let chunks = cache.blocks.chunks(chunk_size);
                 for chunk in chunks {
-                  table_block.inserts(chunk, conn)?;
+                  let res = table_block.inserts(chunk, conn);
+                  if res.is_err() {
+                    log::info!("Insert blocks error {:?}", &res);
+                    res?;
+                  }
                 }
               }
               if cache.transactions.len() > 0 {
                 let chunk_size = (u16::MAX / super::table_transaction::NUMBER_OF_FIELDS) as usize;
                 let chunks = cache.transactions.chunks(chunk_size);
                 for chunk in chunks {
-                  table_tranction.inserts(chunk, conn)?;
+                  let res = table_tranction.inserts(chunk, conn);
+                  if res.is_err() {
+                    log::info!("Insert transactions error {:?}", &res);
+                    res?;
+                  }
                 }
               }
               if cache.transaction_ins.len() > 0 {

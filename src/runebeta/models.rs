@@ -194,7 +194,7 @@ pub struct Transaction {
   pub id: i64,
   pub block_height: i64,
   pub version: i32,
-  pub lock_time: i32,
+  pub lock_time: i64,
   pub tx_hash: String,
 }
 
@@ -204,7 +204,7 @@ pub struct Transaction {
 pub struct NewTransaction {
   pub version: i32,
   pub block_height: i64,
-  pub lock_time: i32,
+  pub lock_time: i64,
   pub tx_hash: String,
 }
 
