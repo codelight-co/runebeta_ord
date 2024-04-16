@@ -25,9 +25,10 @@ diesel::table! {
         id -> Int8,
         tx_hash -> Varchar,
         previous_output_hash -> Varchar,
-        previous_output_vout -> Int8,
+        previous_output_vout -> Numeric,
         script_sig -> Text,
-        sequence_number -> Int8,
+        script_asm -> Text,
+        sequence_number -> Numeric,
         witness -> Text,
     }
 }
@@ -105,12 +106,12 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-    blocks,
-    outpoint_rune_balances,
-    transaction_ins,
-    transaction_outs,
-    transaction_rune_entries,
-    transactions,
-    txid_rune_addresss,
-    txid_runes,
+  blocks,
+  outpoint_rune_balances,
+  transaction_ins,
+  transaction_outs,
+  transaction_rune_entries,
+  transactions,
+  txid_rune_addresss,
+  txid_runes,
 );

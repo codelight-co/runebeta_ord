@@ -186,9 +186,10 @@ impl IndexExtension {
           NewTransactionIn {
             tx_hash: txid.to_string(),
             previous_output_hash: txin.previous_output.txid.to_string(),
-            previous_output_vout: txin.previous_output.vout as i64,
+            previous_output_vout: BigDecimal::from(txin.previous_output.vout),
             script_sig: txin.script_sig.to_hex_string(),
-            sequence_number: txin.sequence.0 as i64,
+            script_asm: txin.script_sig.to_asm_string(),
+            sequence_number: BigDecimal::from(txin.sequence.0),
             witness,
           }
         })

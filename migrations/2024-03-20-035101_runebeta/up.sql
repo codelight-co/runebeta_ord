@@ -19,9 +19,10 @@ CREATE TABLE transaction_ins (
   id BIGSERIAL PRIMARY KEY,
   tx_hash VARCHAR NOT NULL,
   previous_output_hash VARCHAR NOT NULL,
-  previous_output_vout INTEGER NOT NULL,
+  previous_output_vout NUMERIC NOT NULL,
   script_sig TEXT NOT NULL,
-  sequence_number BIGINT NOT NULL,
+  script_asm TEXT NOT NULL,
+  sequence_number NUMERIC NOT NULL,
   -- witness_content TEXT NOT NULL,
   -- witness_elements BIGINT NOT NULL,
   -- witness_indices_start BIGINT NOT NULL

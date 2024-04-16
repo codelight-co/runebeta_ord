@@ -216,9 +216,10 @@ pub struct TransactionIn {
   pub id: i64,
   pub tx_hash: String,
   pub previous_output_hash: String,
-  pub previous_output_vout: i64,
+  pub previous_output_vout: BigDecimal,
   pub script_sig: String,
-  pub sequence_number: i64,
+  pub script_asm: String,
+  pub sequence_number: BigDecimal,
   pub witness: String,
 }
 
@@ -228,9 +229,10 @@ pub struct TransactionIn {
 pub struct NewTransactionIn {
   pub tx_hash: String,
   pub previous_output_hash: String,
-  pub previous_output_vout: i64,
+  pub previous_output_vout: BigDecimal,
   pub script_sig: String,
-  pub sequence_number: i64,
+  pub script_asm: String,
+  pub sequence_number: BigDecimal,
   pub witness: String,
 }
 

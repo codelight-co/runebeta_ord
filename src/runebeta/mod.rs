@@ -7,6 +7,8 @@ mod table_transaction;
 mod table_transaction_in;
 mod table_transaction_out;
 mod table_transaction_rune_entry;
+use std::fmt::Debug;
+
 use diesel::PgConnection;
 pub use extension::IndexExtension;
 pub use table_block::BlockTable;
@@ -19,7 +21,7 @@ mod testing;
 
 pub trait InsertRecords {
   const CHUNK_SIZE: usize;
-  type Record;
+  type Record: Debug;
   fn insert_vector(
     &self,
     records: &Vec<Self::Record>,
@@ -31,6 +33,9 @@ pub trait InsertRecords {
       let res = self.insert_slice(chunk, conn);
       if res.is_err() {
         log::info!("Insert error {:?}", res);
+        for record in chunk {
+          log::info!("{:?}", record);
+        }
       }
     }
     Ok(len)
