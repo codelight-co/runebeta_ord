@@ -45,8 +45,8 @@ diesel::table! {
         address -> Nullable<Varchar>,
         script_pubkey -> Text,
         spent -> Bool,
-        runestone -> Jsonb,
-        cenotaph -> Jsonb,
+        runestone -> Varchar,
+        cenotaph -> Varchar,
         edicts -> Int8,
         mint -> Bool,
         etching -> Bool,
@@ -106,12 +106,12 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-  blocks,
-  outpoint_rune_balances,
-  transaction_ins,
-  transaction_outs,
-  transaction_rune_entries,
-  transactions,
-  txid_rune_addresss,
-  txid_runes,
+    blocks,
+    outpoint_rune_balances,
+    transaction_ins,
+    transaction_outs,
+    transaction_rune_entries,
+    transactions,
+    txid_rune_addresss,
+    txid_runes,
 );

@@ -231,8 +231,8 @@ impl IndexExtension {
         // followed by the protocol identifier, ignoring errors, since OP_RETURN
         // scripts may be invalid
         let mut instructions = tx_out.script_pubkey.instructions();
-        let mut runestone: Option<RunestoneValue> = None;
-        let mut cenotaph: Option<CenotaphValue> = None;
+        let mut runestone: Option<String> = None;
+        let mut cenotaph: Option<String> = None;
         let mut edicts: i64 = 0;
         let mut burn = false;
         let mut etching = false;
@@ -244,13 +244,13 @@ impl IndexExtension {
           // construct the payload by concatenating remaining data pushes
           match artifact {
             Some(Artifact::Runestone(rs)) => {
-              runestone = Some(RunestoneValue::from(rs));
+              runestone = serde_json::to_string(&RunestoneValue::from(rs)).ok();
               edicts = rs.edicts.len() as i64;
               etching = rs.etching.is_some();
               mint = rs.mint.is_some();
             }
             Some(Artifact::Cenotaph(v)) => {
-              cenotaph = Some(CenotaphValue::from(v));
+              cenotaph = serde_json::to_string(&CenotaphValue::from(v)).ok();
               etching = v.etching.is_some();
               mint = v.mint.is_some();
               burn = true;
@@ -269,8 +269,8 @@ impl IndexExtension {
           dust_value: BigDecimal::from(dust_value),
           script_pubkey: tx_out.script_pubkey.to_hex_string(),
           spent: false,
-          runestone: runestone.unwrap_or_default(),
-          cenotaph: cenotaph.unwrap_or_default(),
+          runestone: runestone.unwrap_or_else(||"{}".to_string()),
+          cenotaph: cenotaph.unwrap_or_else(||"{}".to_string()),
           edicts,
           mint,
           etching,

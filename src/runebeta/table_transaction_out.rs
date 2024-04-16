@@ -1,4 +1,4 @@
-use bitcoin::{TxIn, Txid};
+use bitcoin::Txid;
 use diesel::{associations::HasTable, ExpressionMethods, PgConnection, RunQueryDsl};
 
 use super::models::NewTransactionOut;

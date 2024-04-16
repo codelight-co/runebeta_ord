@@ -40,8 +40,10 @@ CREATE TABLE transaction_outs (
   address VARCHAR NULL, --Parse from script_pubkey
   script_pubkey TEXT NOT NULL,
   spent BOOLEAN NOT NULL DEFAULT false,
-  runestone jsonb DEFAULT '{}'::jsonb NOT NULL,
-  cenotaph jsonb DEFAULT '{}'::jsonb NOT NULL,
+  runestone VARCHAR NOT NULL DEFAULT '{}',
+  cenotaph VARCHAR NOT NULL DEFAULT '{}',
+  -- runestone jsonb DEFAULT '{}'::jsonb NOT NULL,
+  -- cenotaph jsonb DEFAULT '{}'::jsonb NOT NULL,
   edicts BIGINT DEFAULT 0 NOT NULL,
   mint BOOLEAN NOT NULL DEFAULT false,
   etching BOOLEAN NOT NULL DEFAULT false,
