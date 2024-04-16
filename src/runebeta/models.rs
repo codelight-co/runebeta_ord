@@ -378,7 +378,9 @@ pub struct OutpointRuneBalance {
   pub tx_hash: String,
   pub vout: i64,
   pub rune_id: String,
+  pub address: String,
   pub balance_value: BigDecimal,
+  pub spent: bool,
 }
 
 #[derive(Insertable, Clone, Debug)]
@@ -387,5 +389,7 @@ pub struct NewOutpointRuneBalance {
   pub tx_hash: String,
   pub vout: i64,
   pub rune_id: String,
+  pub address: String,
   pub balance_value: BigDecimal,
+  pub spent: bool,
 }

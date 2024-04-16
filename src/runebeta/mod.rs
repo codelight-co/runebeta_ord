@@ -37,7 +37,7 @@ pub trait InsertRecords {
         for record in chunk {
           let res = self.insert_record(record, conn);
           if res.is_err() {
-            log::info!("{:?}", record);
+            log::info!("Insert error {:?}, {:?}", res, record);
           }
         }
       }

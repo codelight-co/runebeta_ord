@@ -16,6 +16,8 @@ diesel::table! {
         tx_hash -> Varchar,
         vout -> Int8,
         rune_id -> Varchar,
+        address -> Varchar,
+        spent -> Bool,
         balance_value -> Numeric,
     }
 }
