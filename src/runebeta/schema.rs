@@ -49,6 +49,7 @@ diesel::table! {
         mint -> Bool,
         etching -> Bool,
         burn -> Bool,
+        txout_id -> Varchar,
     }
 }
 
@@ -104,12 +105,12 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-  blocks,
-  outpoint_rune_balances,
-  transaction_ins,
-  transaction_outs,
-  transaction_rune_entries,
-  transactions,
-  txid_rune_addresss,
-  txid_runes,
+    blocks,
+    outpoint_rune_balances,
+    transaction_ins,
+    transaction_outs,
+    transaction_rune_entries,
+    transactions,
+    txid_rune_addresss,
+    txid_runes,
 );

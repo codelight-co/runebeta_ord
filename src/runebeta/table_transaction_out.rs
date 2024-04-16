@@ -27,10 +27,14 @@ impl<'conn> TransactionOutTable {
     txins: &Vec<(Txid, i64)>,
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {
-    for txin in txins.iter() {
+    let txout_ids = txins
+      .iter()
+      .map(|(txid, ind)| format!("{}:{}", txid.to_string(), ind))
+      .collect::<Vec<String>>();
+    let chunks = txout_ids.chunks(u16::MAX as usize);
+    for chunk in chunks {
       diesel::update(transaction_outs)
-        .filter(tx_hash.eq(txin.0.to_string().as_str()))
-        .filter(vout.eq(txin.1))
+        .filter(txout_id.eq_any(chunk))
         .set(spent.eq(true))
         .execute(connection)?;
     }

@@ -81,7 +81,7 @@ impl IndexExtension {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     //Rune db migration
     loop {
-      log::info!("Try to connection to db");
+      log::debug!("Try to connection to db");
       let Ok(mut connection) = PgConnection::establish(&database_url) else {
         let ten_second = time::Duration::from_secs(10);
         thread::sleep(ten_second);
@@ -89,7 +89,9 @@ impl IndexExtension {
       };
       let mut harness_with_output = HarnessWithOutput::write_to_stdout(&mut connection);
       let res = harness_with_output.run_pending_migrations(MIGRATIONS);
-      log::info!("Run migration with result {:?}", &res);
+      if res.is_err() {
+        log::info!("Run migration with error {:?}", &res);
+      }
       break;
     }
     Self {
@@ -257,6 +259,7 @@ impl IndexExtension {
         }
 
         NewTransactionOut {
+          txout_id: format!("{}:{}", txid, index),
           tx_hash: txid.to_string(),
           vout: index as i64,
           value: BigDecimal::from(tx_out.value),
@@ -325,7 +328,6 @@ impl IndexExtension {
     vout: i64,
     balances: &Vec<(RuneId, BigDecimal)>,
   ) -> Result<usize, diesel::result::Error> {
-    log::info!("Runebeta index outpoint balances of transaction {}", txid);
     let mut len = 0;
     balances.iter().for_each(|(rune_id, balance)| {
       let height = rune_id.block.clone();

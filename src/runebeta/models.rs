@@ -240,6 +240,7 @@ pub struct NewTransactionIn {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct TransactionOut {
   pub id: i64,
+  pub txout_id: String,
   pub tx_hash: String,
   pub vout: i64,
   pub value: BigDecimal,
@@ -260,6 +261,8 @@ pub struct TransactionOut {
 #[diesel(table_name = crate::schema::transaction_outs)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTransactionOut {
+  //in format tx_hash:vout
+  pub txout_id: String,
   pub tx_hash: String,
   pub vout: i64,
   pub value: BigDecimal,
