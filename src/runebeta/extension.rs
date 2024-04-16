@@ -502,11 +502,11 @@ impl IndexExtension {
           start = Instant::now();
           table_outpoint_balance.spends(&total_tx_ins, &mut connection)?;
           log::info!(
-            "Update {} spent txout {} ms", total_tx_ins.len(), start.elapsed().as_millis());
+            "Updated {} spent txouts for outpoint balance in {} ms", total_tx_ins.len(), start.elapsed().as_millis());
           start = Instant::now();
           table_transaction_out.spends(&total_tx_ins, &mut connection)?;
           log::info!(
-            "Update {} spent txout {} ms", total_tx_ins.len(), start.elapsed().as_millis());
+            "Updated {} spent txouts for transaction out in {} ms", total_tx_ins.len(), start.elapsed().as_millis());
         }
         self.index_cache.clear();
         break;

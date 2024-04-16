@@ -89,7 +89,7 @@ impl<'index> Updater<'index> {
     );
     while let Ok(block) = rx.recv() {
       //To create backup db set environment ORD_LAST_BLOCK_HEIGHT
-      if self.height > extension.try_lock().unwrap().get_latest_block_height() {
+      if self.height >= extension.try_lock().unwrap().get_latest_block_height() {
         break;
       }
       let index_inscriptions =
