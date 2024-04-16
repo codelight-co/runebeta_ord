@@ -216,9 +216,10 @@ pub struct TransactionIn {
   pub id: i64,
   pub tx_hash: String,
   pub previous_output_hash: String,
-  pub previous_output_vout: i64,
+  pub previous_output_vout: BigDecimal,
   pub script_sig: String,
-  pub sequence_number: i64,
+  pub script_asm: String,
+  pub sequence_number: BigDecimal,
   pub witness: String,
 }
 
@@ -228,9 +229,10 @@ pub struct TransactionIn {
 pub struct NewTransactionIn {
   pub tx_hash: String,
   pub previous_output_hash: String,
-  pub previous_output_vout: i64,
+  pub previous_output_vout: BigDecimal,
   pub script_sig: String,
-  pub sequence_number: i64,
+  pub script_asm: String,
+  pub sequence_number: BigDecimal,
   pub witness: String,
 }
 
@@ -240,17 +242,18 @@ pub struct NewTransactionIn {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct TransactionOut {
   pub id: i64,
+  pub txout_id: String,
   pub tx_hash: String,
-  pub vout: i64,
-  pub value: i64,
+  pub vout: BigDecimal,
+  pub value: BigDecimal,
   pub asm: String,
-  pub dust_value: i64,
+  pub dust_value: BigDecimal,
   pub address: Option<String>,
   pub script_pubkey: String,
   pub spent: bool,
-  pub runestone: RunestoneValue,
-  pub cenotaph: CenotaphValue,
-  pub edicts: i32,
+  pub runestone: String,
+  pub cenotaph: String,
+  pub edicts: i64,
   pub etching: bool,
   pub mint: bool,
   pub burn: bool,
@@ -260,17 +263,19 @@ pub struct TransactionOut {
 #[diesel(table_name = crate::schema::transaction_outs)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTransactionOut {
+  //in format tx_hash:vout
+  pub txout_id: String,
   pub tx_hash: String,
-  pub vout: i64,
-  pub value: i64,
+  pub vout: BigDecimal,
+  pub value: BigDecimal,
   pub asm: String,
-  pub dust_value: i64,
+  pub dust_value: BigDecimal,
   pub address: Option<String>,
   pub script_pubkey: String,
   pub spent: bool,
-  pub runestone: RunestoneValue,
-  pub cenotaph: CenotaphValue,
-  pub edicts: i32,
+  pub runestone: String,
+  pub cenotaph: String,
+  pub edicts: i64,
   pub etching: bool,
   pub mint: bool,
   pub burn: bool,

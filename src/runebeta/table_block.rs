@@ -3,7 +3,10 @@ use diesel::{
   RunQueryDsl, SelectableHelper,
 };
 
-use super::models::{Block, NewBlock};
+use super::{
+  models::{Block, NewBlock},
+  InsertRecords,
+};
 use crate::schema::blocks::dsl::*;
 pub const NUMBER_OF_FIELDS: u16 = 5;
 #[derive(Clone)]
@@ -37,13 +40,29 @@ impl<'conn> BlockTable {
       .returning(Block::as_returning())
       .execute(connection)
   }
-  pub fn inserts(
+}
+
+impl InsertRecords for BlockTable {
+  const CHUNK_SIZE: usize = (u16::MAX / NUMBER_OF_FIELDS) as usize;
+  type Record = NewBlock;
+  fn insert_slice(
     &self,
-    payload: &[NewBlock],
+    records: &[Self::Record],
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(blocks::table())
-      .values(payload)
+      .values(records)
+      .on_conflict_do_nothing()
+      .returning(Block::as_returning())
+      .execute(connection)
+  }
+  fn insert_record(
+    &self,
+    record: &Self::Record,
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    diesel::insert_into(blocks::table())
+      .values(record)
       .on_conflict_do_nothing()
       .returning(Block::as_returning())
       .execute(connection)

@@ -3,7 +3,7 @@ use bitcoin::Txid;
 use diesel::{associations::HasTable, PgConnection, RunQueryDsl};
 
 use crate::schema::transaction_rune_entries::dsl::*;
-use crate::{RuneEntry, RuneId};
+use crate::{InsertRecords, RuneEntry, RuneId};
 
 use super::models::{MintEntryType, NewTxRuneEntry};
 pub const NUMBER_OF_FIELDS: u16 = 17;
@@ -15,17 +15,17 @@ impl<'conn> TransactionRuneEntryTable {
   pub fn new() -> Self {
     Self {}
   }
-  pub fn inserts(
-    &self,
-    entries: &[NewTxRuneEntry],
-    connection: &mut PgConnection,
-  ) -> Result<usize, diesel::result::Error> {
-    diesel::insert_into(transaction_rune_entries::table())
-      .values(entries)
-      .on_conflict_do_nothing()
-      //.returning(OutpointRuneBalance::as_returning())
-      .execute(connection)
-  }
+  // pub fn inserts(
+  //   &self,
+  //   entries: &[NewTxRuneEntry],
+  //   connection: &mut PgConnection,
+  // ) -> Result<usize, diesel::result::Error> {
+  //   diesel::insert_into(transaction_rune_entries::table())
+  //     .values(entries)
+  //     .on_conflict_do_nothing()
+  //     //.returning(OutpointRuneBalance::as_returning())
+  //     .execute(connection)
+  // }
   pub fn create(
     &self,
     txid: &Txid,
@@ -60,6 +60,32 @@ impl<'conn> TransactionRuneEntryTable {
     };
     diesel::insert_into(transaction_rune_entries::table())
       .values(tx_rune_entry)
+      .on_conflict_do_nothing()
+      .execute(connection)
+  }
+}
+
+impl InsertRecords for TransactionRuneEntryTable {
+  const CHUNK_SIZE: usize = (u16::MAX / NUMBER_OF_FIELDS) as usize;
+  type Record = NewTxRuneEntry;
+  fn insert_slice(
+    &self,
+    records: &[Self::Record],
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    diesel::insert_into(transaction_rune_entries::table())
+      .values(records)
+      .on_conflict_do_nothing()
+      .execute(connection)
+  }
+
+  fn insert_record(
+    &self,
+    record: &Self::Record,
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    diesel::insert_into(transaction_rune_entries::table())
+      .values(record)
       .on_conflict_do_nothing()
       .execute(connection)
   }
