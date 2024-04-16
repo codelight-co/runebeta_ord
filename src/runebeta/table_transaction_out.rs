@@ -40,21 +40,6 @@ impl<'conn> TransactionOutTable {
     }
     Ok(txins.len())
   }
-
-  pub fn spend(
-    &self,
-    txins: &Vec<TxIn>,
-    connection: &mut PgConnection,
-  ) -> Result<usize, diesel::result::Error> {
-    for txin in txins.iter() {
-      diesel::update(transaction_outs)
-        .filter(tx_hash.eq(txin.previous_output.txid.to_string().as_str()))
-        .filter(vout.eq(txin.previous_output.vout as i64))
-        .set(spent.eq(true))
-        .execute(connection)?;
-    }
-    Ok(txins.len())
-  }
 }
 
 impl InsertRecords for TransactionOutTable {

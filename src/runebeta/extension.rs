@@ -233,7 +233,7 @@ impl IndexExtension {
         let mut instructions = tx_out.script_pubkey.instructions();
         let mut runestone: Option<RunestoneValue> = None;
         let mut cenotaph: Option<CenotaphValue> = None;
-        let mut edicts: i32 = 0;
+        let mut edicts: i64 = 0;
         let mut burn = false;
         let mut etching = false;
         let mut mint = false;
@@ -245,7 +245,7 @@ impl IndexExtension {
           match artifact {
             Some(Artifact::Runestone(rs)) => {
               runestone = Some(RunestoneValue::from(rs));
-              edicts = rs.edicts.len() as i32;
+              edicts = rs.edicts.len() as i64;
               etching = rs.etching.is_some();
               mint = rs.mint.is_some();
             }
@@ -262,11 +262,11 @@ impl IndexExtension {
         NewTransactionOut {
           txout_id: format!("{}:{}", txid, index),
           tx_hash: txid.to_string(),
-          vout: index as i64,
+          vout: BigDecimal::from(index as u64),
           value: BigDecimal::from(tx_out.value),
           address,
           asm,
-          dust_value,
+          dust_value: BigDecimal::from(dust_value),
           script_pubkey: tx_out.script_pubkey.to_hex_string(),
           spent: false,
           runestone: runestone.unwrap_or_default(),

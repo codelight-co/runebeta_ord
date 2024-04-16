@@ -12,7 +12,7 @@ CREATE TABLE transactions (
   block_height BIGINT NOT NULL,
   version INTEGER NOT NULL,
   lock_time BIGINT NOT NULL,
-  tx_hash VARCHAR NOT NULL UNIQUE,
+  tx_hash VARCHAR NOT NULL UNIQUE
 );
 
 CREATE TABLE transaction_ins (
@@ -42,7 +42,7 @@ CREATE TABLE transaction_outs (
   spent BOOLEAN NOT NULL DEFAULT false,
   runestone jsonb DEFAULT '{}'::jsonb NOT NULL,
   cenotaph jsonb DEFAULT '{}'::jsonb NOT NULL,
-  edicts INTEGER DEFAULT 0 NOT NULL,
+  edicts BIGINT DEFAULT 0 NOT NULL,
   mint BOOLEAN NOT NULL DEFAULT false,
   etching BOOLEAN NOT NULL DEFAULT false,
   burn BOOLEAN NOT NULL DEFAULT false
