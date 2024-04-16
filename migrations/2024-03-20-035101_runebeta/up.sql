@@ -11,8 +11,8 @@ CREATE TABLE transactions (
   id BIGSERIAL PRIMARY KEY,
   block_height BIGINT NOT NULL,
   version INTEGER NOT NULL,
-  lock_time INTEGER NOT NULL,
-  tx_hash VARCHAR NOT NULL UNIQUE
+  lock_time BIGINT NOT NULL,
+  tx_hash VARCHAR NOT NULL UNIQUE,
 );
 
 CREATE TABLE transaction_ins (
@@ -31,17 +31,22 @@ CREATE TABLE transaction_ins (
 
 CREATE TABLE transaction_outs (
   id BIGSERIAL PRIMARY KEY,
+  txout_id VARCHAR NOT NULL DEFAULT '',
   tx_hash VARCHAR NOT NULL,
-  vout BIGINT NOT NULL,
-  value BIGINT NOT NULL,
+  vout NUMERIC NOT NULL,
+  value NUMERIC NOT NULL,
   asm VARCHAR NOT NULL,
-  dust_value BIGINT NOT NULL,
+  dust_value NUMERIC NOT NULL,
   address VARCHAR NULL, --Parse from script_pubkey
   script_pubkey TEXT NOT NULL,
-  spent BOOLEAN NOT NULL DEFAULT false
+  spent BOOLEAN NOT NULL DEFAULT false,
+  runestone jsonb DEFAULT '{}'::jsonb NOT NULL,
+  cenotaph jsonb DEFAULT '{}'::jsonb NOT NULL,
+  edicts INTEGER DEFAULT 0 NOT NULL,
+  mint BOOLEAN NOT NULL DEFAULT false,
+  etching BOOLEAN NOT NULL DEFAULT false,
+  burn BOOLEAN NOT NULL DEFAULT false
 );
-
-CREATE UNIQUE INDEX transaction_outs_tx_hash_idx ON public.transaction_outs USING btree (tx_hash, vout);
 
 CREATE TABLE transaction_rune_entries (
   id BIGSERIAL PRIMARY KEY,
@@ -66,6 +71,7 @@ CREATE TABLE transaction_rune_entries (
   spaced_rune VARCHAR NOT NULL DEFAULT '',
   supply NUMERIC(40) NOT NULL,
   symbol CHAR NULL,
+  turbo BOOLEAN NOT NULL DEFAULT false,
   timestamp INTEGER NOT NULL
 );
 -- Map transaction and runeid (block and tx)

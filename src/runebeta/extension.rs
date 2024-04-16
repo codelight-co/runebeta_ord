@@ -369,7 +369,7 @@ impl IndexExtension {
 
         let table_outpoint_balance = OutpointRuneBalanceTable::new();
         let table_tranction_rune = TransactionRuneEntryTable::new();
-        let transactional_insert = |cache: &IndexBlock| {
+        let _transactional_insert = |cache: &IndexBlock| {
           let res: Result<(), diesel::result::Error> =
             connection.build_transaction().read_write().run(|conn| {
               log::info!(

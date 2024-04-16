@@ -25,10 +25,9 @@ diesel::table! {
         id -> Int8,
         tx_hash -> Varchar,
         previous_output_hash -> Varchar,
-        previous_output_vout -> Numeric,
+        previous_output_vout -> Int8,
         script_sig -> Text,
-        script_asm -> Text,
-        sequence_number -> Numeric,
+        sequence_number -> Int8,
         witness -> Text,
     }
 }
@@ -38,7 +37,7 @@ diesel::table! {
         id -> Int8,
         tx_hash -> Varchar,
         vout -> Int8,
-        value -> Numeric,
+        value -> Int8,
         asm -> Varchar,
         dust_value -> Int8,
         address -> Nullable<Varchar>,
@@ -50,7 +49,6 @@ diesel::table! {
         mint -> Bool,
         etching -> Bool,
         burn -> Bool,
-        txout_id -> Varchar,
     }
 }
 
@@ -82,7 +80,7 @@ diesel::table! {
         id -> Int8,
         block_height -> Int8,
         version -> Int4,
-        lock_time -> Int8,
+        lock_time -> Int4,
         tx_hash -> Varchar,
     }
 }
@@ -106,12 +104,12 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-  blocks,
-  outpoint_rune_balances,
-  transaction_ins,
-  transaction_outs,
-  transaction_rune_entries,
-  transactions,
-  txid_rune_addresss,
-  txid_runes,
+    blocks,
+    outpoint_rune_balances,
+    transaction_ins,
+    transaction_outs,
+    transaction_rune_entries,
+    transactions,
+    txid_rune_addresss,
+    txid_runes,
 );
