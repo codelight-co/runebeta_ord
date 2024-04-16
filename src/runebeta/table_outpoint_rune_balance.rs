@@ -1,4 +1,5 @@
-use diesel::{associations::HasTable, PgConnection, RunQueryDsl};
+use bitcoin::Txid;
+use diesel::{associations::HasTable, ExpressionMethods, PgConnection, RunQueryDsl};
 
 use super::models::NewOutpointRuneBalance;
 use crate::{schema::outpoint_rune_balances::dsl::*, InsertRecords};
@@ -9,6 +10,24 @@ pub struct OutpointRuneBalanceTable {}
 impl<'conn> OutpointRuneBalanceTable {
   pub fn new() -> Self {
     Self {}
+  }
+  pub fn spends(
+    &self,
+    txins: &Vec<(Txid, i64)>,
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    let txout_ids = txins
+      .iter()
+      .map(|(txid, ind)| format!("{}:{}", txid.to_string(), ind))
+      .collect::<Vec<String>>();
+    let chunks = txout_ids.chunks(u16::MAX as usize);
+    for chunk in chunks {
+      diesel::update(outpoint_rune_balances)
+        .filter(txout_id.eq_any(chunk))
+        .set(spent.eq(true))
+        .execute(connection)?;
+    }
+    Ok(txins.len())
   }
 }
 

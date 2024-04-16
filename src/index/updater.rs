@@ -81,12 +81,20 @@ impl<'index> Updater<'index> {
 
     let mut uncommitted = 0;
     let mut value_cache = HashMap::new();
+    let setting_index_inscriptions = self.index.settings.index_inscriptions();
+    log::info!(
+      "Fist inscription height {}. Index inscription {}",
+      self.index.first_inscription_height,
+      setting_index_inscriptions
+    );
     while let Ok(block) = rx.recv() {
-      //
-      let index_inscriptions = self.height >= self.index.first_inscription_height
-        && self.index.settings.index_inscriptions();
+      //To create backup db set environment ORD_LAST_BLOCK_HEIGHT
+      if self.height > extension.try_lock().unwrap().get_latest_block_height() {
+        break;
+      }
+      let index_inscriptions =
+        self.height >= self.index.first_inscription_height && setting_index_inscriptions;
       if index_inscriptions {
-        //Index block with data only
         if let Ok(mut extension) = extension.try_lock() {
           let _res = extension.index_block(self.height as i64, &block.header, &block.txdata);
         }

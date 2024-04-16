@@ -73,12 +73,14 @@ impl IndexBlock {
 pub struct IndexExtension {
   chain: Chain,
   database_url: String,
+  last_block_height: u32,
   index_cache: VecDeque<IndexBlock>,
 }
 impl IndexExtension {
   pub fn new(chain: Chain) -> Self {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let last_block_height = env::var("ORD_LAST_BLOCK_HEIGHT").ok().and_then(|val| val.parse::<u32>().ok()).unwrap_or(u32::MAX);
     //Rune db migration
     loop {
       log::debug!("Try to connection to db");
@@ -97,10 +99,13 @@ impl IndexExtension {
     Self {
       chain,
       database_url,
+      last_block_height,
       index_cache: Default::default(),
     }
   }
-
+  pub fn get_latest_block_height(&self) -> u32 {
+    self.last_block_height
+  }
   /*
    * Loop until successfull establish connection
    */
@@ -325,11 +330,12 @@ impl IndexExtension {
 
   pub fn index_outpoint_balances(
     &mut self,
-    txid: &Txid,
-    vout: i64,
+    transaction: &Transaction,
+    vout: usize,
     balances: &Vec<(RuneId, BigDecimal)>,
   ) -> Result<usize, diesel::result::Error> {
     let mut len = 0;
+    let network = self.chain.network();
     balances.iter().for_each(|(rune_id, balance)| {
       let height = rune_id.block.clone();
       let index_block = match self.get_block_cache(height as u64) {
@@ -339,14 +345,23 @@ impl IndexExtension {
           self.index_cache.back_mut().unwrap()
         }
       };
-      let outpoint_balance = NewOutpointRuneBalance {
-        tx_hash: txid.to_string(),
-        vout,
-        rune_id: rune_id.to_string(),
-        balance_value: balance.clone(),
-      };
-      len = len + 1;
-      index_block.outpoint_balances.push(outpoint_balance);
+      let txid = transaction.txid();
+      if let Some(tx_out) = transaction.output.get(vout) {
+        let address = Address::from_script(&tx_out.script_pubkey, network.clone()).ok();
+        let address = address.map(|addr| addr.to_string());
+        let address = address.map(|addr| addr.to_string()).unwrap_or_default();
+        let outpoint_balance = NewOutpointRuneBalance {
+          txout_id: format!("{}:{}", &txid, vout),
+          tx_hash: txid.to_string(),
+          vout: vout as i64,
+          rune_id: rune_id.to_string(),
+          address,
+          spent: false,
+          balance_value: balance.clone(),
+        };
+        len = len + 1;
+        index_block.outpoint_balances.push(outpoint_balance);
+      }
     });
     Ok(len)
   }
@@ -484,6 +499,10 @@ impl IndexExtension {
         log::info!(
             "Inserted {} runes {} ms", total_transaction_runes.len(), start.elapsed().as_millis());
         if total_tx_ins.len() > 0 {
+          start = Instant::now();
+          table_outpoint_balance.spends(&total_tx_ins, &mut connection)?;
+          log::info!(
+            "Update {} spent txout {} ms", total_tx_ins.len(), start.elapsed().as_millis());
           start = Instant::now();
           table_transaction_out.spends(&total_tx_ins, &mut connection)?;
           log::info!(

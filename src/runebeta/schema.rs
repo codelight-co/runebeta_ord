@@ -13,9 +13,12 @@ diesel::table! {
 diesel::table! {
     outpoint_rune_balances (id) {
         id -> Int8,
+        txout_id -> Varchar,
         tx_hash -> Varchar,
         vout -> Int8,
         rune_id -> Varchar,
+        address -> Varchar,
+        spent -> Bool,
         balance_value -> Numeric,
     }
 }
@@ -106,12 +109,12 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-    blocks,
-    outpoint_rune_balances,
-    transaction_ins,
-    transaction_outs,
-    transaction_rune_entries,
-    transactions,
-    txid_rune_addresss,
-    txid_runes,
+  blocks,
+  outpoint_rune_balances,
+  transaction_ins,
+  transaction_outs,
+  transaction_rune_entries,
+  transactions,
+  txid_rune_addresss,
+  txid_runes,
 );

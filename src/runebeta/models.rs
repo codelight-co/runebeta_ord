@@ -375,17 +375,23 @@ pub struct NewTransactionRuneAddress {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct OutpointRuneBalance {
   pub id: i64,
+  pub txout_id: String,
   pub tx_hash: String,
   pub vout: i64,
   pub rune_id: String,
+  pub address: String,
   pub balance_value: BigDecimal,
+  pub spent: bool,
 }
 
 #[derive(Insertable, Clone, Debug)]
 #[diesel(table_name = crate::schema::outpoint_rune_balances)]
 pub struct NewOutpointRuneBalance {
+  pub txout_id: String,
   pub tx_hash: String,
   pub vout: i64,
   pub rune_id: String,
+  pub address: String,
   pub balance_value: BigDecimal,
+  pub spent: bool,
 }
