@@ -351,6 +351,7 @@ impl IndexExtension {
         let address = address.map(|addr| addr.to_string());
         let address = address.map(|addr| addr.to_string()).unwrap_or_default();
         let outpoint_balance = NewOutpointRuneBalance {
+          txout_id: format!("{}:{}", &txid, vout),
           tx_hash: txid.to_string(),
           vout: vout as i64,
           rune_id: rune_id.to_string(),
@@ -498,6 +499,10 @@ impl IndexExtension {
         log::info!(
             "Inserted {} runes {} ms", total_transaction_runes.len(), start.elapsed().as_millis());
         if total_tx_ins.len() > 0 {
+          start = Instant::now();
+          table_outpoint_balance.spends(&total_tx_ins, &mut connection)?;
+          log::info!(
+            "Update {} spent txout {} ms", total_tx_ins.len(), start.elapsed().as_millis());
           start = Instant::now();
           table_transaction_out.spends(&total_tx_ins, &mut connection)?;
           log::info!(

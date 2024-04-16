@@ -4,6 +4,7 @@
 --
 CREATE TABLE outpoint_rune_balances (
     id BIGSERIAL PRIMARY KEY,
+    txout_id VARCHAR NOT NULL DEFAULT '',
     tx_hash VARCHAR NOT NULL,
     vout BIGINT NOT NULL,
     rune_id VARCHAR NOT NULL,
