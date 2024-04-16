@@ -33,8 +33,12 @@ pub trait InsertRecords {
       let res = self.insert_slice(chunk, conn);
       if res.is_err() {
         log::info!("Insert error {:?}", res);
+        //For debuging
         for record in chunk {
-          log::info!("{:?}", record);
+          let res = self.insert_record(record, conn);
+          if res.is_err() {
+            log::info!("{:?}", record);
+          }
         }
       }
     }
@@ -43,6 +47,11 @@ pub trait InsertRecords {
   fn insert_slice(
     &self,
     records: &[Self::Record],
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error>;
+  fn insert_record(
+    &self,
+    records: &Self::Record,
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error>;
 }

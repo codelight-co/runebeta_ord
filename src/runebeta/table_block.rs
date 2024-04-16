@@ -56,4 +56,15 @@ impl InsertRecords for BlockTable {
       .returning(Block::as_returning())
       .execute(connection)
   }
+  fn insert_record(
+    &self,
+    record: &Self::Record,
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    diesel::insert_into(blocks::table())
+      .values(record)
+      .on_conflict_do_nothing()
+      .returning(Block::as_returning())
+      .execute(connection)
+  }
 }

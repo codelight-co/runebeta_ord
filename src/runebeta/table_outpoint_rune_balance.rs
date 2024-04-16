@@ -10,17 +10,6 @@ impl<'conn> OutpointRuneBalanceTable {
   pub fn new() -> Self {
     Self {}
   }
-  // pub fn insert(
-  //   &self,
-  //   balances: &[NewOutpointRuneBalance],
-  //   connection: &mut PgConnection,
-  // ) -> Result<usize, diesel::result::Error> {
-  //   diesel::insert_into(outpoint_rune_balances::table())
-  //     .values(balances)
-  //     .on_conflict_do_nothing()
-  //     //.returning(OutpointRuneBalance::as_returning())
-  //     .execute(connection)
-  // }
 }
 
 impl InsertRecords for OutpointRuneBalanceTable {
@@ -33,6 +22,16 @@ impl InsertRecords for OutpointRuneBalanceTable {
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(outpoint_rune_balances::table())
       .values(records)
+      .on_conflict_do_nothing()
+      .execute(connection)
+  }
+  fn insert_record(
+    &self,
+    record: &Self::Record,
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    diesel::insert_into(outpoint_rune_balances::table())
+      .values(record)
       .on_conflict_do_nothing()
       .execute(connection)
   }

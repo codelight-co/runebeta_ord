@@ -26,4 +26,15 @@ impl InsertRecords for TransactionInTable {
       .on_conflict_do_nothing()
       .execute(connection)
   }
+
+  fn insert_record(
+    &self,
+    record: &Self::Record,
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    diesel::insert_into(transaction_ins::table())
+      .values(record)
+      .on_conflict_do_nothing()
+      .execute(connection)
+  }
 }
