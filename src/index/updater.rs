@@ -762,13 +762,13 @@ impl<'index> Updater<'index> {
     Index::increment_statistic(&wtx, Statistic::SatRanges, self.sat_ranges_since_flush)?;
     self.sat_ranges_since_flush = 0;
     Index::increment_statistic(&wtx, Statistic::Commits, 1)?;
-    wtx.commit()?;
     if let Ok(mut extension) = extension.lock() {
       let res = extension.commit();
       if res.is_err() {
         log::error!("Extension commit err {:?}", &res);
       }
     }
+    wtx.commit()?;
     Reorg::update_savepoints(self.index, self.height)?;
 
     Ok(())
