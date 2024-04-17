@@ -3,7 +3,7 @@ use diesel::{associations::HasTable, ExpressionMethods, PgConnection, RunQueryDs
 
 use super::models::NewOutpointRuneBalance;
 use crate::{schema::outpoint_rune_balances::dsl::*, InsertRecords};
-pub const NUMBER_OF_FIELDS: u16 = 5;
+pub const NUMBER_OF_FIELDS: u16 = 8;
 #[derive(Clone)]
 pub struct OutpointRuneBalanceTable {}
 
