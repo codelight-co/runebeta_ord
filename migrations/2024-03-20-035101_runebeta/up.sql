@@ -10,6 +10,7 @@ CREATE TABLE blocks (
 CREATE TABLE transactions (
   id BIGSERIAL PRIMARY KEY,
   block_height BIGINT NOT NULL,
+  tx_index INTEGER NOT NULL DEFAULT 0,
   version INTEGER NOT NULL,
   lock_time BIGINT NOT NULL,
   tx_hash VARCHAR NOT NULL UNIQUE
@@ -17,6 +18,8 @@ CREATE TABLE transactions (
 
 CREATE TABLE transaction_ins (
   id BIGSERIAL PRIMARY KEY,
+  block_height BIGINT NOT NULL,
+  tx_index INTEGER NOT NULL DEFAULT 0,
   tx_hash VARCHAR NOT NULL,
   previous_output_hash VARCHAR NOT NULL,
   previous_output_vout NUMERIC NOT NULL,
@@ -31,6 +34,8 @@ CREATE TABLE transaction_ins (
 
 CREATE TABLE transaction_outs (
   id BIGSERIAL PRIMARY KEY,
+  block_height BIGINT NOT NULL,
+  tx_index INTEGER NOT NULL DEFAULT 0,
   txout_id VARCHAR NOT NULL DEFAULT '',
   tx_hash VARCHAR NOT NULL,
   vout NUMERIC NOT NULL,
@@ -52,15 +57,15 @@ CREATE TABLE transaction_outs (
 
 CREATE TABLE transaction_rune_entries (
   id BIGSERIAL PRIMARY KEY,
+  block_height BIGINT NOT NULL,
+  tx_index INTEGER NOT NULL DEFAULT 0,
   tx_hash VARCHAR NOT NULL,
-  --RuneId
-  -- rune_height INTEGER NOT NULL,
-  -- rune_index SMALLINT NOT NULL DEFAULT 0,
   rune_id VARCHAR NOT NULL,
   burned NUMERIC(40) NOT NULL,
   divisibility SMALLINT NOT NULL,
   -- txid
   etching VARCHAR NOT NULL,
+  parent VARCHAR NULL,
   -- So lan mints, initial with 0
   mints BIGINT NOT NULL,
   -- zero based index of rune
@@ -79,12 +84,16 @@ CREATE TABLE transaction_rune_entries (
 -- Map transaction and runeid (block and tx)
 CREATE TABLE txid_runes (
   id BIGSERIAL PRIMARY KEY,
+  block_height BIGINT NOT NULL,
+  tx_index INTEGER NOT NULL DEFAULT 0,
   tx_hash VARCHAR NOT NULL,
   rune_id VARCHAR NOT NULL
 );
 
 CREATE TABLE txid_rune_addresss (
   id BIGSERIAL PRIMARY KEY,
+  block_height BIGINT NOT NULL,
+  tx_index INTEGER NOT NULL DEFAULT 0,
   tx_hash VARCHAR NOT NULL,
   rune_id VARCHAR NOT NULL,
   address VARCHAR NOT NULL,

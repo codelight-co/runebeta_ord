@@ -36,7 +36,8 @@ fn test_rune_entry_index() {
   let transaction = transaction.unwrap();
   let artifact = Runestone::decipher(&transaction);
   let extension = IndexExtension::new(Chain::from_str("testnet").unwrap());
-  let vec_out = extension.index_transaction_output(&txid, &transaction.output, artifact.as_ref());
+  let vec_out =
+    extension.index_transaction_output(1, 0, &txid, &transaction.output, artifact.as_ref());
   println!("{:?}", &vec_out);
   assert_eq!(vec_out.len(), 2);
   let txout = vec_out.get(1).unwrap();
@@ -146,7 +147,8 @@ fn test_index_transaction_with_etching() {
     nonce: 1844512382,
   };
   let extension = IndexExtension::new(Chain::from_str("testnet").unwrap());
-  let vec_out = extension.index_transaction_output(&txid, &transaction.output, artifact.as_ref());
+  let vec_out =
+    extension.index_transaction_output(1, 0, &txid, &transaction.output, artifact.as_ref());
   println!("{:?}", &vec_out);
   assert_eq!(vec_out.len(), 2);
   let txout = vec_out.get(0).unwrap();
@@ -181,7 +183,8 @@ fn test_index_transaction_with_edicts() {
     nonce: 1972576522,
   };
   let extension = IndexExtension::new(Chain::from_str("testnet").unwrap());
-  let vec_out = extension.index_transaction_output(&txid, &transaction.output, artifact.as_ref());
+  let vec_out =
+    extension.index_transaction_output(1, 0, &txid, &transaction.output, artifact.as_ref());
   assert_eq!(vec_out.len(), 5);
   let txout = vec_out.get(1).unwrap();
   let runestone = serde_json::to_string(&txout.runestone).unwrap_or_default();

@@ -3,13 +3,13 @@ use crate::{
     models::{MintEntryType, NewOutpointRuneBalance},
     OutpointRuneBalanceTable,
   },
-  Chain, InsertRecords, RuneEntry, RuneId,
+  Chain, InsertRecords, RuneEntry, RuneId, TransactionRuneTable,
 };
 
 use super::{
   models::{
-    CenotaphValue, NewBlock, NewTransaction, NewTransactionIn, NewTransactionOut, NewTxRuneEntry,
-    RunestoneValue,
+    CenotaphValue, NewBlock, NewTransaction, NewTransactionIn, NewTransactionOut,
+    NewTransactionRune, NewTransactionRuneAddress, NewTxRuneEntry, RunestoneValue,
   },
   table_transaction::TransactionTable,
   BlockTable, TransactionInTable, TransactionOutTable, TransactionRuneEntryTable,
@@ -41,6 +41,7 @@ pub struct IndexBlock {
   transaction_outs: Vec<NewTransactionOut>,
   //Store outpoint banlance in each rune update
   outpoint_balances: Vec<NewOutpointRuneBalance>,
+  tx_runes: Vec<NewTransactionRune>,
   rune_entries: Vec<NewTxRuneEntry>,
 }
 impl IndexBlock {
@@ -80,7 +81,10 @@ impl IndexExtension {
   pub fn new(chain: Chain) -> Self {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let last_block_height = env::var("ORD_LAST_BLOCK_HEIGHT").ok().and_then(|val| val.parse::<u32>().ok()).unwrap_or(u32::MAX);
+    let last_block_height = env::var("ORD_LAST_BLOCK_HEIGHT")
+      .ok()
+      .and_then(|val| val.parse::<u32>().ok())
+      .unwrap_or(u32::MAX);
     //Rune db migration
     loop {
       log::debug!("Try to connection to db");
@@ -158,7 +162,7 @@ impl IndexExtension {
     let mut transaction_ins: Vec<NewTransactionIn> = vec![];
     let mut tx_ins = vec![];
 
-    for (tx, txid) in block_data.iter() {
+    for (tx_index, (tx, txid)) in block_data.iter().enumerate() {
       let artifact = Runestone::decipher(tx);
       let Transaction {
         version,
@@ -169,6 +173,7 @@ impl IndexExtension {
       let new_transaction = NewTransaction {
         version: *version,
         block_height: height,
+        tx_index: tx_index as i32,
         lock_time: lock_time.to_consensus_u32() as i64,
         tx_hash: txid.to_string(),
       };
@@ -189,6 +194,8 @@ impl IndexExtension {
             let _ = write!(&mut witness, "{:02X}", byte);
           }
           NewTransactionIn {
+            block_height: height,
+            tx_index: tx_index as i32,
             tx_hash: txid.to_string(),
             previous_output_hash: txin.previous_output.txid.to_string(),
             previous_output_vout: BigDecimal::from(txin.previous_output.vout),
@@ -201,7 +208,8 @@ impl IndexExtension {
         .collect();
       transaction_ins.append(&mut new_transaction_ins);
       //Create transaction out for each transaction then push to common vector for whole block
-      let mut new_transaction_outs = self.index_transaction_output(txid, output, artifact.as_ref());
+      let mut new_transaction_outs =
+        self.index_transaction_output(height, tx_index, txid, output, artifact.as_ref());
       transaction_outs.append(&mut new_transaction_outs);
     }
     let index_block = IndexBlock {
@@ -218,6 +226,8 @@ impl IndexExtension {
   }
   pub fn index_transaction_output(
     &self,
+    height: i64,
+    tx_index: usize,
     txid: &Txid,
     output: &Vec<TxOut>,
     artifact: Option<&Artifact>,
@@ -265,6 +275,8 @@ impl IndexExtension {
         }
 
         NewTransactionOut {
+          block_height: height,
+          tx_index: tx_index as i32,
           txout_id: format!("{}:{}", txid, index),
           tx_hash: txid.to_string(),
           vout: BigDecimal::from(index as u64),
@@ -274,8 +286,8 @@ impl IndexExtension {
           dust_value: BigDecimal::from(dust_value),
           script_pubkey: tx_out.script_pubkey.to_hex_string(),
           spent: false,
-          runestone: runestone.unwrap_or_else(||"{}".to_string()),
-          cenotaph: cenotaph.unwrap_or_else(||"{}".to_string()),
+          runestone: runestone.unwrap_or_else(|| "{}".to_string()),
+          cenotaph: cenotaph.unwrap_or_else(|| "{}".to_string()),
           edicts,
           mint,
           etching,
@@ -295,12 +307,13 @@ impl IndexExtension {
     log::info!("Runebeta index transaction rune {}, rune {}", txid, rune_id);
     let tx_rune_entry = NewTxRuneEntry {
       tx_hash: txid.to_string(),
-      // rune_height: rune_id.block as i32,
-      // rune_index: rune_id.tx as i16,
+      block_height: rune_id.block as i64,
+      tx_index: rune_id.tx as i32,
       rune_id: rune_id.to_string(),
       burned: BigDecimal::from(rune_entry.burned),
       divisibility: rune_entry.divisibility as i16,
       etching: rune_entry.etching.to_string(),
+      parent: None,
       mints: rune_entry.mints as i64,
       number: rune_entry.block as i64,
       rune: BigDecimal::from(rune_entry.spaced_rune.rune.0),
@@ -330,6 +343,8 @@ impl IndexExtension {
 
   pub fn index_outpoint_balances(
     &mut self,
+    block_height: i64,
+    tx_index: u32,
     transaction: &Transaction,
     vout: usize,
     balances: &Vec<(RuneId, BigDecimal)>,
@@ -350,7 +365,16 @@ impl IndexExtension {
         let address = Address::from_script(&tx_out.script_pubkey, network.clone()).ok();
         let address = address.map(|addr| addr.to_string());
         let address = address.map(|addr| addr.to_string()).unwrap_or_default();
+        let tx_rune = NewTransactionRune {
+          block_height,
+          tx_index: tx_index as i32,
+          tx_hash: txid.to_string(),
+          rune_id: rune_id.to_string(),
+        };
+        index_block.tx_runes.push(tx_rune);
         let outpoint_balance = NewOutpointRuneBalance {
+          block_height,
+          tx_index: tx_index as i32,
           txout_id: format!("{}:{}", &txid, vout),
           tx_hash: txid.to_string(),
           vout: vout as i64,
@@ -383,7 +407,8 @@ impl IndexExtension {
         let table_transaction_out = TransactionOutTable::new();
 
         let table_outpoint_balance = OutpointRuneBalanceTable::new();
-        let table_tranction_rune = TransactionRuneEntryTable::new();
+        let table_transaction_rune = TransactionRuneTable::new();
+        let table_transaction_rune_entry = TransactionRuneEntryTable::new();
         let _transactional_insert = |cache: &IndexBlock| {
           let res: Result<(), diesel::result::Error> =
             connection.build_transaction().read_write().run(|conn| {
@@ -428,8 +453,12 @@ impl IndexExtension {
                 log::info!("Insert outpoint balances error {:?}", &res);
                 res?;
               }
-              
-              let res = table_tranction_rune.insert_vector(&cache.rune_entries, conn);
+              let res = table_transaction_rune.insert_vector(&cache.tx_runes, conn);
+              if res.is_err() {
+                log::info!("Insert transaction runes error {:?}", &res);
+                res?;
+              }
+              let res = table_transaction_rune_entry.insert_vector(&cache.rune_entries, conn);
               if res.is_err() {
                 log::info!("Insert rune entries error {:?}", &res);
                 res?;
@@ -450,7 +479,8 @@ impl IndexExtension {
         let mut total_transaction_ins = vec![];
         let mut total_transaction_outs = vec![];
         let mut total_outpoint_balances = vec![];
-        let mut total_transaction_runes = vec![];
+        let mut total_tx_runes = vec![];
+        let mut total_transaction_rune_entries = vec![];
         let mut total_tx_ins = vec![];
         loop {
           let Some(IndexBlock {
@@ -461,6 +491,7 @@ impl IndexExtension {
             transaction_ins,
             transaction_outs,
             outpoint_balances,
+            tx_runes,
             rune_entries,
           }) = self.index_cache.pop_front()
           else {
@@ -471,42 +502,75 @@ impl IndexExtension {
           total_transaction_ins.extend(transaction_ins);
           total_transaction_outs.extend(transaction_outs);
           total_outpoint_balances.extend(outpoint_balances);
-          total_transaction_runes.extend(rune_entries);
+          total_tx_runes.extend(tx_runes);
+          total_transaction_rune_entries.extend(rune_entries);
           total_tx_ins.extend(tx_ins);
         }
         let mut start = Instant::now();
         let _res = table_block.insert_vector(&total_blocks, &mut connection);
         log::info!(
-            "Inserted {} blocks in {} ms", total_blocks.len(), start.elapsed().as_millis());
-        start = Instant::now();    
+          "Inserted {} blocks in {} ms",
+          total_blocks.len(),
+          start.elapsed().as_millis()
+        );
+        start = Instant::now();
         let _res = table_tranction.insert_vector(&total_transactions, &mut connection);
         log::info!(
-            "Inserted {} transactions in {} ms", total_transactions.len(), start.elapsed().as_millis());
+          "Inserted {} transactions in {} ms",
+          total_transactions.len(),
+          start.elapsed().as_millis()
+        );
         start = Instant::now();
         let _res = table_transaction_in.insert_vector(&total_transaction_ins, &mut connection);
         log::info!(
-            "Inserted {} txins in {} ms", total_transaction_ins.len(), start.elapsed().as_millis());
+          "Inserted {} txins in {} ms",
+          total_transaction_ins.len(),
+          start.elapsed().as_millis()
+        );
         start = Instant::now();
         let _res = table_transaction_out.insert_vector(&total_transaction_outs, &mut connection);
         log::info!(
-            "Inserted {} txouts in {} ms", total_transaction_outs.len(), start.elapsed().as_millis());
+          "Inserted {} txouts in {} ms",
+          total_transaction_outs.len(),
+          start.elapsed().as_millis()
+        );
         start = Instant::now();
         let _res = table_outpoint_balance.insert_vector(&total_outpoint_balances, &mut connection);
         log::info!(
-            "Inserted {} outpoint balances in {} ms", total_outpoint_balances.len(), start.elapsed().as_millis());
+          "Inserted {} outpoint balances in {} ms",
+          total_outpoint_balances.len(),
+          start.elapsed().as_millis()
+        );
         start = Instant::now();
-        let _res = table_tranction_rune.insert_vector(&total_transaction_runes, &mut connection);
+        let _res = table_transaction_rune.insert_vector(&total_tx_runes, &mut connection);
         log::info!(
-            "Inserted {} runes {} ms", total_transaction_runes.len(), start.elapsed().as_millis());
+          "Inserted {} transaction runes in {} ms",
+          total_tx_runes.len(),
+          start.elapsed().as_millis()
+        );
+        start = Instant::now();
+        let _res = table_transaction_rune_entry
+          .insert_vector(&total_transaction_rune_entries, &mut connection);
+        log::info!(
+          "Inserted {} runes {} ms",
+          total_transaction_rune_entries.len(),
+          start.elapsed().as_millis()
+        );
         if total_tx_ins.len() > 0 {
           start = Instant::now();
           table_outpoint_balance.spends(&total_tx_ins, &mut connection)?;
           log::info!(
-            "Updated {} spent txouts for outpoint balance in {} ms", total_tx_ins.len(), start.elapsed().as_millis());
+            "Updated {} spent txouts for outpoint balance in {} ms",
+            total_tx_ins.len(),
+            start.elapsed().as_millis()
+          );
           start = Instant::now();
           table_transaction_out.spends(&total_tx_ins, &mut connection)?;
           log::info!(
-            "Updated {} spent txouts for transaction out in {} ms", total_tx_ins.len(), start.elapsed().as_millis());
+            "Updated {} spent txouts for transaction out in {} ms",
+            total_tx_ins.len(),
+            start.elapsed().as_millis()
+          );
         }
         self.index_cache.clear();
         break;

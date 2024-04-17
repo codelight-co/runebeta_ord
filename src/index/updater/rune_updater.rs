@@ -183,6 +183,8 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
       balances.sort();
       if let Ok(mut extension) = self.extension.try_lock() {
         let _res = extension.index_outpoint_balances(
+          self.height as i64,
+          tx_index,
           tx,
           vout,
           &balances

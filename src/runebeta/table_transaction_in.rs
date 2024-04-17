@@ -3,7 +3,7 @@ use diesel::{associations::HasTable, PgConnection, RunQueryDsl};
 use crate::runebeta::models::NewTransactionIn;
 use crate::schema::transaction_ins::dsl::*;
 use crate::InsertRecords;
-pub const NUMBER_OF_FIELDS: u16 = 7;
+pub const NUMBER_OF_FIELDS: u16 = 10;
 #[derive(Clone)]
 pub struct TransactionInTable {}
 

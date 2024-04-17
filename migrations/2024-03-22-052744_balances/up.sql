@@ -4,6 +4,8 @@
 --
 CREATE TABLE outpoint_rune_balances (
     id BIGSERIAL PRIMARY KEY,
+    block_height BIGINT NOT NULL DEFAULT 0,
+    tx_index INTEGER NOT NULL DEFAULT 0,
     txout_id VARCHAR NOT NULL DEFAULT '',
     tx_hash VARCHAR NOT NULL,
     vout BIGINT NOT NULL,

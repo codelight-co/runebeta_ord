@@ -193,6 +193,7 @@ pub struct NewBlock {
 pub struct Transaction {
   pub id: i64,
   pub block_height: i64,
+  pub tx_index: i32,
   pub version: i32,
   pub lock_time: i64,
   pub tx_hash: String,
@@ -204,6 +205,7 @@ pub struct Transaction {
 pub struct NewTransaction {
   pub version: i32,
   pub block_height: i64,
+  pub tx_index: i32,
   pub lock_time: i64,
   pub tx_hash: String,
 }
@@ -214,6 +216,8 @@ pub struct NewTransaction {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct TransactionIn {
   pub id: i64,
+  pub block_height: i64,
+  pub tx_index: i32,
   pub tx_hash: String,
   pub previous_output_hash: String,
   pub previous_output_vout: BigDecimal,
@@ -227,6 +231,8 @@ pub struct TransactionIn {
 #[diesel(table_name = crate::schema::transaction_ins)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTransactionIn {
+  pub block_height: i64,
+  pub tx_index: i32,
   pub tx_hash: String,
   pub previous_output_hash: String,
   pub previous_output_vout: BigDecimal,
@@ -242,6 +248,8 @@ pub struct NewTransactionIn {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct TransactionOut {
   pub id: i64,
+  pub block_height: i64,
+  pub tx_index: i32,
   pub txout_id: String,
   pub tx_hash: String,
   pub vout: BigDecimal,
@@ -263,6 +271,8 @@ pub struct TransactionOut {
 #[diesel(table_name = crate::schema::transaction_outs)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTransactionOut {
+  pub block_height: i64,
+  pub tx_index: i32,
   //in format tx_hash:vout
   pub txout_id: String,
   pub tx_hash: String,
@@ -286,6 +296,8 @@ pub struct NewTransactionOut {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct TxRuneEntry {
   pub id: i64,
+  pub block_height: i64,
+  pub tx_index: i32,
   pub tx_hash: String,
   // pub rune_height: i32,
   // pub rune_index: i16,
@@ -293,6 +305,7 @@ pub struct TxRuneEntry {
   pub burned: BigDecimal,
   pub divisibility: i16,
   pub etching: String,
+  pub parent: Option<String>,
   pub mint_entry: MintEntryType,
   pub mints: i64,
   pub number: i64,
@@ -310,6 +323,8 @@ pub struct TxRuneEntry {
 #[diesel(table_name = crate::schema::transaction_rune_entries)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTxRuneEntry {
+  pub block_height: i64,
+  pub tx_index: i32,
   pub tx_hash: String,
   // pub rune_height: i32,
   // pub rune_index: i16,
@@ -317,6 +332,7 @@ pub struct NewTxRuneEntry {
   pub burned: BigDecimal,
   pub divisibility: i16,
   pub etching: String,
+  pub parent: Option<String>,
   pub mint_entry: MintEntryType,
   pub mints: i64,
   pub number: i64, //Block
@@ -331,39 +347,47 @@ pub struct NewTxRuneEntry {
 }
 
 //TransactionRune
-#[derive(Queryable, Selectable)]
+#[derive(Queryable, Selectable, Insertable, Debug)]
 #[diesel(table_name = crate::schema::txid_runes)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct TransactionRune {
   pub id: i64,
+  pub block_height: i64,
+  pub tx_index: i32,
   pub tx_hash: String,
   pub rune_id: String,
 }
 
-#[derive(Insertable, AsChangeset)]
+#[derive(Insertable, AsChangeset, Debug)]
 #[diesel(table_name = crate::schema::txid_runes)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTransactionRune {
+  pub block_height: i64,
+  pub tx_index: i32,
   pub tx_hash: String,
   pub rune_id: String,
 }
 
 //TransactionRuneIdAddress
-#[derive(Queryable, Selectable)]
+#[derive(Queryable, Selectable, Debug)]
 #[diesel(table_name = crate::schema::txid_rune_addresss)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct TransactionRuneAddress {
   pub id: i64,
+  pub block_height: i64,
+  pub tx_index: i32,
   pub tx_hash: String,
   pub rune_id: String,
   pub address: String,
   pub spent: bool,
 }
 
-#[derive(Insertable, AsChangeset)]
+#[derive(Insertable, AsChangeset, Debug)]
 #[diesel(table_name = crate::schema::txid_rune_addresss)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTransactionRuneAddress {
+  pub block_height: i64,
+  pub tx_index: i32,
   pub tx_hash: String,
   pub rune_id: String,
   pub address: String,
@@ -375,6 +399,8 @@ pub struct NewTransactionRuneAddress {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct OutpointRuneBalance {
   pub id: i64,
+  pub block_height: i64,
+  pub tx_index: i32,
   pub txout_id: String,
   pub tx_hash: String,
   pub vout: i64,
@@ -387,6 +413,8 @@ pub struct OutpointRuneBalance {
 #[derive(Insertable, Clone, Debug)]
 #[diesel(table_name = crate::schema::outpoint_rune_balances)]
 pub struct NewOutpointRuneBalance {
+  pub block_height: i64,
+  pub tx_index: i32,
   pub txout_id: String,
   pub tx_hash: String,
   pub vout: i64,

@@ -2,7 +2,7 @@ use diesel::{associations::HasTable, PgConnection, RunQueryDsl, SelectableHelper
 
 use super::models::{NewTransaction, Transaction};
 use crate::{schema::transactions::dsl::*, InsertRecords};
-pub const NUMBER_OF_FIELDS: u16 = 5;
+pub const NUMBER_OF_FIELDS: u16 = 6;
 #[derive(Clone)]
 pub struct TransactionTable {}
 
