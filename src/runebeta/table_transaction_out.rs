@@ -3,7 +3,7 @@ use diesel::{associations::HasTable, ExpressionMethods, PgConnection, RunQueryDs
 
 use super::models::NewTransactionOut;
 use crate::{schema::transaction_outs::dsl::*, InsertRecords};
-pub const NUMBER_OF_FIELDS: u16 = 15;
+pub const NUMBER_OF_FIELDS: u16 = 18;
 #[derive(Clone)]
 pub struct TransactionOutTable {}
 

@@ -1,22 +1,41 @@
 use diesel::{associations::HasTable, PgConnection, RunQueryDsl};
 
-use crate::runebeta::models::NewTransactionIn;
 use crate::schema::txid_rune_addresss::dsl::*;
-pub const NUMBER_OF_FIELDS: u16 = 5;
-#[derive(Clone)]
-pub struct TransactionRuneIdAddressTable {}
+use crate::InsertRecords;
 
-impl<'conn> TransactionRuneIdAddressTable {
+use super::models::NewTransactionRuneAddress;
+pub const NUMBER_OF_FIELDS: u16 = 7;
+#[derive(Clone)]
+pub struct TransactionRuneAddressTable {}
+
+impl TransactionRuneAddressTable {
   pub fn new() -> Self {
     Self {}
   }
-  pub fn insert(
+}
+
+impl InsertRecords for TransactionRuneAddressTable {
+  const CHUNK_SIZE: usize = (u16::MAX / NUMBER_OF_FIELDS) as usize;
+  type Record = NewTransactionRuneAddress;
+
+  fn insert_slice(
     &self,
-    txs: &Vec<NewTransactionRuneAddress>,
+    records: &[Self::Record],
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {
     diesel::insert_into(txid_rune_addresss::table())
-      .values(txs)
+      .values(records)
+      .on_conflict_do_nothing()
+      .execute(connection)
+  }
+
+  fn insert_record(
+    &self,
+    records: &Self::Record,
+    connection: &mut PgConnection,
+  ) -> Result<usize, diesel::result::Error> {
+    diesel::insert_into(txid_rune_addresss::table())
+      .values(records)
       .on_conflict_do_nothing()
       .execute(connection)
   }

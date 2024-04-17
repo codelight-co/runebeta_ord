@@ -6,7 +6,7 @@ use crate::schema::transaction_rune_entries::dsl::*;
 use crate::{InsertRecords, RuneEntry, RuneId};
 
 use super::models::{MintEntryType, NewTxRuneEntry};
-pub const NUMBER_OF_FIELDS: u16 = 17;
+pub const NUMBER_OF_FIELDS: u16 = 20;
 
 #[derive(Clone)]
 pub struct TransactionRuneEntryTable {}
@@ -37,12 +37,13 @@ impl<'conn> TransactionRuneEntryTable {
     let symbol_value = rune_entry.symbol.map(|c| c.to_string());
     let tx_rune_entry = NewTxRuneEntry {
       tx_hash: txid.to_string(),
-      // rune_height: rune_id.block as i32,
-      // rune_index: rune_id.tx as i16,
+      block_height: rune_id_value.block as i64,
+      tx_index: rune_id_value.tx as i32,
       rune_id: rune_id_value.to_string(),
       burned: BigDecimal::from(rune_entry.burned),
       divisibility: rune_entry.divisibility as i16,
       etching: etching_value,
+      parent: None,
       mints: rune_entry.mints as i64,
       number: rune_entry.block as i64,
       rune: BigDecimal::from(rune_entry.spaced_rune.rune.0),
