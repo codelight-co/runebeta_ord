@@ -74,6 +74,7 @@ impl IndexBlock {
 pub struct IndexExtension {
   chain: Chain,
   database_url: String,
+  index_all_transaction: bool,
   last_block_height: u32,
   index_cache: VecDeque<IndexBlock>,
 }
@@ -81,6 +82,8 @@ impl IndexExtension {
   pub fn new(chain: Chain) -> Self {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let index_all_transaction =
+      env::var("ORD_SUPERSAT_INDEX_ALL_TRANSACTIONS").unwrap_or_else(|_| String::from("0"));
     let last_block_height = env::var("ORD_LAST_BLOCK_HEIGHT")
       .ok()
       .and_then(|val| val.parse::<u32>().ok())
@@ -104,6 +107,7 @@ impl IndexExtension {
       chain,
       database_url,
       last_block_height,
+      index_all_transaction: index_all_transaction == "1",
       index_cache: Default::default(),
     }
   }
@@ -125,7 +129,16 @@ impl IndexExtension {
   }
   ///
   ///
-  pub fn get_block_cache(&mut self, height: u64) -> Option<&mut IndexBlock> {
+  pub fn get_block_cache(&mut self, height: u64) -> Option<&IndexBlock> {
+    for cache in self.index_cache.iter() {
+      if cache.block_height == height {
+        //get existing cache
+        return Some(cache);
+      }
+    }
+    None
+  }
+  pub fn get_mut_block_cache(&mut self, height: u64) -> Option<&mut IndexBlock> {
     for cache in self.index_cache.iter_mut() {
       if cache.block_height == height {
         //get existing cache
@@ -143,6 +156,9 @@ impl IndexExtension {
   //     Ok(0)
   //   }
   // }
+  /*
+   * This function is call after index other info
+   */
   pub fn index_block(
     &mut self,
     height: i64,
@@ -150,13 +166,18 @@ impl IndexExtension {
     block_data: &Vec<(Transaction, Txid)>,
   ) -> Result<(), diesel::result::Error> {
     log::info!("Index block {}", &height);
+    //Index rune transaction only or explicit define param ORD_SUPERSAT_INDEX_ALL_TRANSACTIONS
+    let index_block = self.get_block_cache(height as u64);
+    if index_block.is_none() && !self.index_all_transaction {
+      //Don't index block unrelated with rune
+      return Ok(());
+    }
     let new_block = NewBlock {
       block_time: block_header.time as i64,
       block_height: height,
       previous_hash: block_header.prev_blockhash.to_string(),
       block_hash: block_header.block_hash().to_string(),
     };
-
     let mut transactions = vec![];
     let mut transaction_outs = vec![];
     let mut transaction_ins: Vec<NewTransactionIn> = vec![];
@@ -212,16 +233,18 @@ impl IndexExtension {
         self.index_transaction_output(height, tx_index, txid, output, artifact.as_ref());
       transaction_outs.append(&mut new_transaction_outs);
     }
-    let index_block = IndexBlock {
-      block_height: height as u64,
-      tx_ins,
-      blocks: vec![new_block],
-      transactions,
-      transaction_ins,
-      transaction_outs,
-      ..Default::default()
+    let index_block = match self.get_mut_block_cache(height as u64) {
+      Some(cache) => cache,
+      None => {
+        self.index_cache.push_back(IndexBlock::new(height as u64));
+        self.index_cache.back_mut().unwrap()
+      }
     };
-    self.index_cache.push_back(index_block);
+    index_block.blocks.push(new_block);
+    index_block.transactions.append(&mut transactions);
+    index_block.transaction_ins.append(&mut transaction_ins);
+    index_block.transaction_outs.append(&mut transaction_outs);
+    index_block.tx_ins.append(&mut tx_ins);
     Ok(())
   }
   pub fn index_transaction_output(
@@ -330,7 +353,7 @@ impl IndexExtension {
       turbo: rune_entry.turbo,
     };
     let height = rune_id.block.clone();
-    let index_block = match self.get_block_cache(height as u64) {
+    let index_block = match self.get_mut_block_cache(height as u64) {
       Some(cache) => cache,
       None => {
         self.index_cache.push_back(IndexBlock::new(height as u64));
@@ -353,7 +376,7 @@ impl IndexExtension {
     let network = self.chain.network();
     balances.iter().for_each(|(rune_id, balance)| {
       let height = rune_id.block.clone();
-      let index_block = match self.get_block_cache(height as u64) {
+      let index_block = match self.get_mut_block_cache(height as u64) {
         Some(cache) => cache,
         None => {
           self.index_cache.push_back(IndexBlock::new(height));
