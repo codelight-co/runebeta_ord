@@ -167,11 +167,31 @@ impl IndexExtension {
   ) -> Result<(), diesel::result::Error> {
     log::info!("Index block {}", &height);
     //Index rune transaction only or explicit define param ORD_SUPERSAT_INDEX_ALL_TRANSACTIONS
+    let index_all_tx = self.index_all_transaction.clone();
     let index_block = self.get_block_cache(height as u64);
-    if index_block.is_none() && !self.index_all_transaction {
+    if index_block.is_none() && !index_all_tx {
       //Don't index block unrelated with rune
       return Ok(());
     }
+    let mut rune_tx_hashs = index_block
+      .map(|index_block| {
+        index_block
+          .outpoint_balances
+          .iter()
+          .map(|balance| balance.tx_hash.clone())
+          .collect::<Vec<String>>()
+      })
+      .unwrap_or_default();
+    let mut rune_entry_hash = index_block
+      .map(|index_block| {
+        index_block
+          .rune_entries
+          .iter()
+          .map(|item: &NewTxRuneEntry| item.tx_hash.clone())
+          .collect::<Vec<String>>()
+      })
+      .unwrap_or_default();
+    rune_tx_hashs.append(&mut rune_entry_hash);
     let new_block = NewBlock {
       block_time: block_header.time as i64,
       block_height: height,
@@ -184,54 +204,57 @@ impl IndexExtension {
     let mut tx_ins = vec![];
 
     for (tx_index, (tx, txid)) in block_data.iter().enumerate() {
-      let artifact = Runestone::decipher(tx);
-      let Transaction {
-        version,
-        lock_time,
-        input,
-        output,
-      } = tx;
-      let new_transaction = NewTransaction {
-        version: *version,
-        block_height: height,
-        tx_index: tx_index as i32,
-        lock_time: lock_time.to_consensus_u32() as i64,
-        tx_hash: txid.to_string(),
-      };
-      transactions.push(new_transaction);
-      input.iter().for_each(|tx_in| {
-        tx_ins.push((
-          tx_in.previous_output.txid.clone(),
-          tx_in.previous_output.vout as i64,
-        ))
-      });
-      let mut new_transaction_ins = input
-        .iter()
-        .map(|txin| {
-          let mut witness_buffer = Vec::new();
-          let _ = txin.witness.consensus_encode(&mut witness_buffer);
-          let mut witness = String::with_capacity(witness_buffer.len() * 2);
-          for byte in witness_buffer.into_iter() {
-            let _ = write!(&mut witness, "{:02X}", byte);
-          }
-          NewTransactionIn {
-            block_height: height,
-            tx_index: tx_index as i32,
-            tx_hash: txid.to_string(),
-            previous_output_hash: txin.previous_output.txid.to_string(),
-            previous_output_vout: BigDecimal::from(txin.previous_output.vout),
-            script_sig: txin.script_sig.to_hex_string(),
-            script_asm: txin.script_sig.to_asm_string(),
-            sequence_number: BigDecimal::from(txin.sequence.0),
-            witness,
-          }
-        })
-        .collect();
-      transaction_ins.append(&mut new_transaction_ins);
-      //Create transaction out for each transaction then push to common vector for whole block
-      let mut new_transaction_outs =
-        self.index_transaction_output(height, tx_index, txid, output, artifact.as_ref());
-      transaction_outs.append(&mut new_transaction_outs);
+      let tx_hash = txid.to_string();
+      if rune_tx_hashs.contains(&tx_hash) {
+        let artifact = Runestone::decipher(tx);
+        let Transaction {
+          version,
+          lock_time,
+          input,
+          output,
+        } = tx;
+        let new_transaction = NewTransaction {
+          version: *version,
+          block_height: height,
+          tx_index: tx_index as i32,
+          lock_time: lock_time.to_consensus_u32() as i64,
+          tx_hash,
+        };
+        transactions.push(new_transaction);
+        input.iter().for_each(|tx_in| {
+          tx_ins.push((
+            tx_in.previous_output.txid.clone(),
+            tx_in.previous_output.vout as i64,
+          ))
+        });
+        let mut new_transaction_ins = input
+          .iter()
+          .map(|txin| {
+            let mut witness_buffer = Vec::new();
+            let _ = txin.witness.consensus_encode(&mut witness_buffer);
+            let mut witness = String::with_capacity(witness_buffer.len() * 2);
+            for byte in witness_buffer.into_iter() {
+              let _ = write!(&mut witness, "{:02X}", byte);
+            }
+            NewTransactionIn {
+              block_height: height,
+              tx_index: tx_index as i32,
+              tx_hash: txid.to_string(),
+              previous_output_hash: txin.previous_output.txid.to_string(),
+              previous_output_vout: BigDecimal::from(txin.previous_output.vout),
+              script_sig: txin.script_sig.to_hex_string(),
+              script_asm: txin.script_sig.to_asm_string(),
+              sequence_number: BigDecimal::from(txin.sequence.0),
+              witness,
+            }
+          })
+          .collect();
+        transaction_ins.append(&mut new_transaction_ins);
+        //Create transaction out for each transaction then push to common vector for whole block
+        let mut new_transaction_outs =
+          self.index_transaction_output(height, tx_index, txid, output, artifact.as_ref());
+        transaction_outs.append(&mut new_transaction_outs);
+      }
     }
     let index_block = match self.get_mut_block_cache(height as u64) {
       Some(cache) => cache,
