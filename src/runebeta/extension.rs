@@ -205,7 +205,7 @@ impl IndexExtension {
 
     for (tx_index, (tx, txid)) in block_data.iter().enumerate() {
       let tx_hash = txid.to_string();
-      if rune_tx_hashs.contains(&tx_hash) {
+      if index_all_tx || rune_tx_hashs.contains(&tx_hash) {
         let artifact = Runestone::decipher(tx);
         let Transaction {
           version,
