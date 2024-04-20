@@ -610,9 +610,9 @@ impl Index {
   }
 
   pub fn update(&self) -> Result {
+    let extension = Arc::new(IndexExtension::new(self.settings.chain()));
     loop {
       let wtx = self.begin_write()?;
-      let extension = Arc::new(Mutex::new(IndexExtension::new(self.settings.chain())));
       let ordinal_block_height = wtx
         .open_table(HEIGHT_TO_BLOCK_HEADER)?
         .range(0..)?
@@ -630,7 +630,7 @@ impl Index {
         sat_ranges_since_flush: 0,
       };
 
-      match updater.update_index(wtx, extension) {
+      match updater.update_index(wtx, Arc::clone(&extension)) {
         Ok(ok) => return Ok(ok),
         Err(err) => {
           log::info!("{}", err.to_string());

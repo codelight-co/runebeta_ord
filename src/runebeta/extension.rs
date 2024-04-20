@@ -19,14 +19,20 @@ use bitcoin::{
   block::Header, consensus::Encodable, opcodes, script::Instruction, Address, Transaction, TxOut,
   Txid,
 };
-use diesel::pg::PgConnection;
-use diesel::prelude::*;
+use diesel::r2d2::Pool;
+use diesel::{pg::PgConnection, r2d2::ConnectionManager};
 use diesel_migrations::{
   embed_migrations, EmbeddedMigrations, HarnessWithOutput, MigrationHarness,
 };
 use dotenvy::dotenv;
 use ordinals::{Artifact, Runestone};
-use std::{collections::VecDeque, fmt::Write, time::Instant};
+use std::{
+  collections::{HashMap, VecDeque},
+  fmt::Write,
+  sync::{Arc, Mutex, RwLock},
+  thread::JoinHandle,
+  time::{Instant, SystemTime, UNIX_EPOCH},
+};
 use std::{env, thread, time};
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
@@ -34,15 +40,15 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 pub struct IndexBlock {
   block_height: u64,
   // Raw txin for update previous txouts'spent => true
-  tx_ins: Vec<(Txid, i64)>,
-  blocks: Vec<NewBlock>,
-  transactions: Vec<NewTransaction>,
-  transaction_ins: Vec<NewTransactionIn>,
-  transaction_outs: Vec<NewTransactionOut>,
+  raw_tx_ins: Mutex<Vec<(Txid, i64)>>,
+  blocks: Mutex<Vec<NewBlock>>,
+  transactions: Mutex<Vec<NewTransaction>>,
+  transaction_ins: Mutex<Vec<NewTransactionIn>>,
+  transaction_outs: Mutex<Vec<NewTransactionOut>>,
   //Store outpoint banlance in each rune update
-  outpoint_balances: Vec<NewOutpointRuneBalance>,
-  tx_runes: Vec<NewTransactionRune>,
-  rune_entries: Vec<NewTxRuneEntry>,
+  outpoint_balances: Mutex<Vec<NewOutpointRuneBalance>>,
+  tx_runes: Mutex<Vec<NewTransactionRune>>,
+  rune_entries: Mutex<Vec<NewTxRuneEntry>>,
 }
 impl IndexBlock {
   pub fn new(height: u64) -> Self {
@@ -51,148 +57,200 @@ impl IndexBlock {
       ..Default::default()
     }
   }
-  pub fn get_size(&self) -> u128 {
-    self.blocks.len() as u128
-      + self.transactions.len() as u128
-      + self.transaction_ins.len() as u128
-      + self.transaction_outs.len() as u128
-      + self.outpoint_balances.len() as u128
-      + self.rune_entries.len() as u128
-      + self.tx_ins.len() as u128
+  fn add_block(&self, block: NewBlock) {
+    if let Ok(ref mut blocks) = self.blocks.try_lock() {
+      blocks.push(block);
+    } else {
+      log::info!("Cannot lock the blocks for insert item");
+    }
   }
-  fn _clear(&mut self) {
-    self.blocks.clear();
-    self.transactions.clear();
-    self.transaction_ins.clear();
-    self.transaction_outs.clear();
-    self.tx_ins.clear();
-    self.rune_entries.clear();
-    self.outpoint_balances.clear();
+  fn add_rune_entry(&self, rune_entry: NewTxRuneEntry) {
+    if let Ok(ref mut rune_entries) = self.rune_entries.try_lock() {
+      rune_entries.push(rune_entry);
+    } else {
+      log::info!("Cannot lock the rune_entries for insert item");
+    }
   }
+  fn append_transactions(&self, items: &mut Vec<NewTransaction>) {
+    if let Ok(ref mut transactions) = self.transactions.try_lock() {
+      transactions.append(items);
+    } else {
+      log::info!("Cannot lock the transactions for insert item");
+    }
+  }
+  fn append_transaction_ins(&self, items: &mut Vec<NewTransactionIn>) {
+    if let Ok(ref mut transaction_ins) = self.transaction_ins.try_lock() {
+      transaction_ins.append(items);
+    } else {
+      log::info!("Cannot lock the transaction_ins for insert item");
+    }
+  }
+  fn append_transaction_outs(&self, items: &mut Vec<NewTransactionOut>) {
+    if let Ok(ref mut transaction_outs) = self.transaction_outs.try_lock() {
+      transaction_outs.append(items);
+    } else {
+      log::info!("Cannot lock the transaction_outs for insert item");
+    }
+  }
+  fn append_outpoint_rune_balances(&self, items: &mut Vec<NewOutpointRuneBalance>) {
+    if let Ok(ref mut outpoint_balances) = self.outpoint_balances.try_lock() {
+      outpoint_balances.append(items);
+    } else {
+      log::info!("Cannot lock the rune_balances for insert item");
+    }
+  }
+
+  fn append_tx_rune(&self, items: &mut Vec<NewTransactionRune>) {
+    if let Ok(ref mut tx_runes) = self.tx_runes.try_lock() {
+      tx_runes.append(items);
+    } else {
+      log::info!("Cannot lock the tx_runes for insert item");
+    }
+  }
+  fn append_raw_ins(&self, items: &mut Vec<(Txid, i64)>) {
+    if let Ok(ref mut raw_tx_ins) = self.raw_tx_ins.try_lock() {
+      raw_tx_ins.append(items);
+    } else {
+      log::info!("Cannot lock the raw_tx_ins for insert item");
+    }
+  }
+  // pub fn get_size(&self) -> u128 {
+  //   self.blocks.len() as u128
+  //     + self.transactions.len() as u128
+  //     + self.transaction_ins.len() as u128
+  //     + self.transaction_outs.len() as u128
+  //     + self.outpoint_balances.len() as u128
+  //     + self.rune_entries.len() as u128
+  //     + self.tx_ins.len() as u128
+  // }
+  // fn _clear(&mut self) {
+  //   self.blocks.clear();
+  //   self.transactions.clear();
+  //   self.transaction_ins.clear();
+  //   self.transaction_outs.clear();
+  //   self.tx_ins.clear();
+  //   self.rune_entries.clear();
+  //   self.outpoint_balances.clear();
+  // }
 }
 #[derive(Debug)]
 pub struct IndexExtension {
   chain: Chain,
-  database_url: String,
-  index_all_transaction: bool,
+  //Apr 21
+  //Todo: index "Rune transaction" only - Must deeply understand which txs are related with some runes
+  _index_all_transaction: bool,
   last_block_height: u32,
-  index_cache: VecDeque<IndexBlock>,
+  connection_pool: Pool<ConnectionManager<PgConnection>>,
+  index_cache: RwLock<VecDeque<Arc<IndexBlock>>>,
+  //Store indexer start time
+  index_log: RwLock<HashMap<i64, u128>>,
 }
 impl IndexExtension {
   pub fn new(chain: Chain) -> Self {
     dotenv().ok();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let index_all_transaction =
-      env::var("ORD_SUPERSAT_INDEX_ALL_TRANSACTIONS").unwrap_or_else(|_| String::from("0"));
+      env::var("ORD_SUPERSATS_INDEX_ALL_TRANSACTIONS").unwrap_or_else(|_| String::from("0"));
     let last_block_height = env::var("ORD_LAST_BLOCK_HEIGHT")
       .ok()
       .and_then(|val| val.parse::<u32>().ok())
       .unwrap_or(u32::MAX);
-    //Rune db migration
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
+    // Refer to the `r2d2` documentation for more methods to use
+    // when building a connection pool
+    let mut connection_pool = None;
     loop {
-      log::debug!("Try to connection to db");
-      let Ok(mut connection) = PgConnection::establish(&database_url) else {
+      let manager = ConnectionManager::<PgConnection>::new(database_url.as_str());
+      let Ok(pool) = Pool::builder().test_on_check_out(true).build(manager) else {
         let ten_second = time::Duration::from_secs(10);
         thread::sleep(ten_second);
+        log::info!("Try connect to reconnect to the db");
         continue;
       };
-      let mut harness_with_output = HarnessWithOutput::write_to_stdout(&mut connection);
-      let res = harness_with_output.run_pending_migrations(MIGRATIONS);
-      if res.is_err() {
-        log::info!("Run migration with error {:?}", &res);
-      }
+      //Run db migration
+      if let Ok(mut connection) = pool.clone().get() {
+        let mut harness_with_output = HarnessWithOutput::write_to_stdout(&mut connection);
+        let res = harness_with_output.run_pending_migrations(MIGRATIONS);
+        if res.is_err() {
+          log::info!("Run migration with error {:?}", &res);
+        }
+      };
+      connection_pool.replace(pool);
       break;
     }
+
     Self {
       chain,
-      database_url,
       last_block_height,
-      index_all_transaction: index_all_transaction == "1",
+      _index_all_transaction: index_all_transaction == "1",
+      connection_pool: connection_pool.expect("Connection pool must successfull created"),
       index_cache: Default::default(),
+      index_log: Default::default(),
     }
   }
   pub fn get_latest_block_height(&self) -> u32 {
     self.last_block_height
   }
-  /*
-   * Loop until successfull establish connection
-   */
-  pub fn get_connection(&self) -> Option<PgConnection> {
-    loop {
-      let Ok(connection) = PgConnection::establish(&self.database_url) else {
-        let ten_second = time::Duration::from_secs(10);
-        thread::sleep(ten_second);
-        continue;
-      };
-      return Some(connection);
-    }
-  }
-  ///
-  ///
-  pub fn get_block_cache(&mut self, height: u64) -> Option<&IndexBlock> {
-    for cache in self.index_cache.iter() {
-      if cache.block_height == height {
-        //get existing cache
-        return Some(cache);
+
+  pub fn get_block_cache(&self, height: u64) -> Option<Arc<IndexBlock>> {
+    if let Ok(cache) = self.index_cache.read() {
+      for cache in cache.iter() {
+        if cache.block_height == height {
+          //get existing cache
+          return Some(Arc::clone(cache));
+        }
       }
     }
     None
   }
-  pub fn get_mut_block_cache(&mut self, height: u64) -> Option<&mut IndexBlock> {
-    for cache in self.index_cache.iter_mut() {
-      if cache.block_height == height {
-        //get existing cache
-        return Some(cache);
-      }
+  pub fn add_index_block(&self, index_block: Arc<IndexBlock>) {
+    if let Ok(mut cache) = self.index_cache.write() {
+      cache.push_back(index_block);
     }
-    None
   }
-  // pub fn get_indexed_block_height(&self) -> Result<i64, diesel::result::Error> {
-  //   if let Some(mut connection) = self.get_connection() {
-  //     let table_block = BlockTable::new();
-  //     table_block.get_latest_block_height(&mut connection)
-  //   } else {
-  //     log::debug!("Cannot establish connection");
-  //     Ok(0)
-  //   }
-  // }
+  pub fn log_start_indexing(&self, height: i64) {
+    let current = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .expect("Time went backwards");
+    log::info!(
+      "Indexer start index block {} at {}",
+      &height,
+      current.as_millis()
+    );
+    let mut index_log = self.index_log.write().unwrap();
+    index_log.insert(height.clone(), current.as_millis());
+  }
+  pub fn log_finish_indexing(&self, height: i64) {
+    let current = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .expect("Time went backwards")
+      .as_millis();
+    let start = self
+      .index_log
+      .read()
+      .unwrap()
+      .get(&height)
+      .map(|v| v.clone())
+      .unwrap_or_default();
+
+    log::info!(
+      "[Benchmark]#{}|{}|{}|{}",
+      &height,
+      start,
+      current,
+      current - start
+    );
+  }
   /*
    * This function is call after index other info
    */
   pub fn index_block(
-    &mut self,
+    &self,
     height: i64,
     block_header: &Header,
     block_data: &Vec<(Transaction, Txid)>,
   ) -> Result<(), diesel::result::Error> {
-    log::info!("Index block {}", &height);
-    //Index rune transaction only or explicit define param ORD_SUPERSAT_INDEX_ALL_TRANSACTIONS
-    let index_all_tx = self.index_all_transaction.clone();
-    //We index block first then indexBlock undefined here
-    let index_block = self.get_block_cache(height as u64);
-    // if index_block.is_none() && !index_all_tx {
-    //   //Don't index block unrelated with rune
-    //   return Ok(());
-    // }
-    let mut rune_tx_hashs = index_block
-      .map(|index_block| {
-        index_block
-          .outpoint_balances
-          .iter()
-          .map(|balance| balance.tx_hash.clone())
-          .collect::<Vec<String>>()
-      })
-      .unwrap_or_default();
-    let mut rune_entry_hash = index_block
-      .map(|index_block| {
-        index_block
-          .rune_entries
-          .iter()
-          .map(|item: &NewTxRuneEntry| item.tx_hash.clone())
-          .collect::<Vec<String>>()
-      })
-      .unwrap_or_default();
-    rune_tx_hashs.append(&mut rune_entry_hash);
+    self.log_start_indexing(height);
     let new_block = NewBlock {
       block_time: block_header.time as i64,
       block_height: height,
@@ -206,69 +264,68 @@ impl IndexExtension {
 
     for (tx_index, (tx, txid)) in block_data.iter().enumerate() {
       let tx_hash = txid.to_string();
-      if index_all_tx || rune_tx_hashs.contains(&tx_hash) {
-        let artifact = Runestone::decipher(tx);
-        let Transaction {
-          version,
-          lock_time,
-          input,
-          output,
-        } = tx;
-        let new_transaction = NewTransaction {
-          version: *version,
-          block_height: height,
-          tx_index: tx_index as i32,
-          lock_time: lock_time.to_consensus_u32() as i64,
-          tx_hash,
-        };
-        transactions.push(new_transaction);
-        input.iter().for_each(|tx_in| {
-          tx_ins.push((
-            tx_in.previous_output.txid.clone(),
-            tx_in.previous_output.vout as i64,
-          ))
-        });
-        let mut new_transaction_ins = input
-          .iter()
-          .map(|txin| {
-            let mut witness_buffer = Vec::new();
-            let _ = txin.witness.consensus_encode(&mut witness_buffer);
-            let mut witness = String::with_capacity(witness_buffer.len() * 2);
-            for byte in witness_buffer.into_iter() {
-              let _ = write!(&mut witness, "{:02X}", byte);
-            }
-            NewTransactionIn {
-              block_height: height,
-              tx_index: tx_index as i32,
-              tx_hash: txid.to_string(),
-              previous_output_hash: txin.previous_output.txid.to_string(),
-              previous_output_vout: BigDecimal::from(txin.previous_output.vout),
-              script_sig: txin.script_sig.to_hex_string(),
-              script_asm: txin.script_sig.to_asm_string(),
-              sequence_number: BigDecimal::from(txin.sequence.0),
-              witness,
-            }
-          })
-          .collect();
-        transaction_ins.append(&mut new_transaction_ins);
-        //Create transaction out for each transaction then push to common vector for whole block
-        let mut new_transaction_outs =
-          self.index_transaction_output(height, tx_index, txid, output, artifact.as_ref());
-        transaction_outs.append(&mut new_transaction_outs);
-      }
+      let artifact = Runestone::decipher(tx);
+      let Transaction {
+        version,
+        lock_time,
+        input,
+        output,
+      } = tx;
+      let new_transaction = NewTransaction {
+        version: *version,
+        block_height: height,
+        tx_index: tx_index as i32,
+        lock_time: lock_time.to_consensus_u32() as i64,
+        tx_hash,
+      };
+      transactions.push(new_transaction);
+      input.iter().for_each(|tx_in| {
+        tx_ins.push((
+          tx_in.previous_output.txid.clone(),
+          tx_in.previous_output.vout as i64,
+        ))
+      });
+      let mut new_transaction_ins = input
+        .iter()
+        .map(|txin| {
+          let mut witness_buffer = Vec::new();
+          let _ = txin.witness.consensus_encode(&mut witness_buffer);
+          let mut witness = String::with_capacity(witness_buffer.len() * 2);
+          for byte in witness_buffer.into_iter() {
+            let _ = write!(&mut witness, "{:02X}", byte);
+          }
+          NewTransactionIn {
+            block_height: height,
+            tx_index: tx_index as i32,
+            tx_hash: txid.to_string(),
+            previous_output_hash: txin.previous_output.txid.to_string(),
+            previous_output_vout: BigDecimal::from(txin.previous_output.vout),
+            script_sig: txin.script_sig.to_hex_string(),
+            script_asm: txin.script_sig.to_asm_string(),
+            sequence_number: BigDecimal::from(txin.sequence.0),
+            witness,
+          }
+        })
+        .collect();
+      transaction_ins.append(&mut new_transaction_ins);
+      //Create transaction out for each transaction then push to common vector for whole block
+      let mut new_transaction_outs =
+        self.index_transaction_output(height, tx_index, txid, output, artifact.as_ref());
+      transaction_outs.append(&mut new_transaction_outs);
     }
-    let index_block = match self.get_mut_block_cache(height as u64) {
+    let index_block = match self.get_block_cache(height as u64) {
       Some(cache) => cache,
       None => {
-        self.index_cache.push_back(IndexBlock::new(height as u64));
-        self.index_cache.back_mut().unwrap()
+        let new_index_block = Arc::new(IndexBlock::new(height as u64));
+        self.add_index_block(Arc::clone(&new_index_block));
+        new_index_block
       }
     };
-    index_block.blocks.push(new_block);
-    index_block.transactions.append(&mut transactions);
-    index_block.transaction_ins.append(&mut transaction_ins);
-    index_block.transaction_outs.append(&mut transaction_outs);
-    index_block.tx_ins.append(&mut tx_ins);
+    index_block.add_block(new_block);
+    index_block.append_transactions(&mut transactions);
+    index_block.append_transaction_ins(&mut transaction_ins);
+    index_block.append_transaction_outs(&mut transaction_outs);
+    index_block.append_raw_ins(&mut tx_ins);
     Ok(())
   }
   pub fn index_transaction_output(
@@ -346,12 +403,12 @@ impl IndexExtension {
   }
 
   pub fn index_transaction_rune_entry(
-    &mut self,
+    &self,
     txid: &Txid,
     rune_id: &RuneId,
     rune_entry: &RuneEntry,
   ) -> Result<(), diesel::result::Error> {
-    log::info!("Runebeta index transaction rune {}, rune {}", txid, rune_id);
+    log::debug!("Runebeta index transaction rune {}, rune {}", txid, rune_id);
     let tx_rune_entry = NewTxRuneEntry {
       tx_hash: txid.to_string(),
       block_height: rune_id.block as i64,
@@ -377,19 +434,20 @@ impl IndexExtension {
       turbo: rune_entry.turbo,
     };
     let height = rune_id.block.clone();
-    let index_block = match self.get_mut_block_cache(height as u64) {
+    let index_block = match self.get_block_cache(height as u64) {
       Some(cache) => cache,
       None => {
-        self.index_cache.push_back(IndexBlock::new(height as u64));
-        self.index_cache.back_mut().unwrap()
+        let new_index_block = Arc::new(IndexBlock::new(height as u64));
+        self.add_index_block(Arc::clone(&new_index_block));
+        new_index_block
       }
     };
-    index_block.rune_entries.push(tx_rune_entry);
+    index_block.add_rune_entry(tx_rune_entry);
     Ok(())
   }
 
   pub fn index_outpoint_balances(
-    &mut self,
+    &self,
     block_height: i64,
     tx_index: u32,
     transaction: &Transaction,
@@ -398,15 +456,9 @@ impl IndexExtension {
   ) -> Result<usize, diesel::result::Error> {
     let mut len = 0;
     let network = self.chain.network();
+    let mut tx_runes = vec![];
+    let mut outpoint_balances = vec![];
     balances.iter().for_each(|(rune_id, balance)| {
-      let height = rune_id.block.clone();
-      let index_block = match self.get_mut_block_cache(height as u64) {
-        Some(cache) => cache,
-        None => {
-          self.index_cache.push_back(IndexBlock::new(height));
-          self.index_cache.back_mut().unwrap()
-        }
-      };
       let txid = transaction.txid();
       if let Some(tx_out) = transaction.output.get(vout) {
         let address = Address::from_script(&tx_out.script_pubkey, network.clone()).ok();
@@ -418,7 +470,7 @@ impl IndexExtension {
           tx_hash: txid.to_string(),
           rune_id: rune_id.to_string(),
         };
-        index_block.tx_runes.push(tx_rune);
+        tx_runes.push(tx_rune);
         let outpoint_balance = NewOutpointRuneBalance {
           block_height,
           tx_index: tx_index as i32,
@@ -431,198 +483,140 @@ impl IndexExtension {
           balance_value: balance.clone(),
         };
         len = len + 1;
-        index_block.outpoint_balances.push(outpoint_balance);
+        outpoint_balances.push(outpoint_balance);
       }
     });
+    let index_block = match self.get_block_cache(block_height as u64) {
+      Some(cache) => cache,
+      None => {
+        let new_index_block = Arc::new(IndexBlock::new(block_height as u64));
+        self.add_index_block(Arc::clone(&new_index_block));
+        new_index_block
+      }
+    };
+    index_block.append_tx_rune(&mut tx_runes);
+    index_block.append_outpoint_rune_balances(&mut outpoint_balances);
     Ok(len)
   }
-  pub fn commit(&mut self) -> anyhow::Result<usize> {
-    let len = self.index_cache.len();
-    // log::info!("Commit cache for {} blocks", len);
-    if len > 0 {
-      //Try connect to postgres db until successfully establish connection
-      loop {
-        let Ok(mut connection) = PgConnection::establish(&self.database_url) else {
-          let ten_second = time::Duration::from_secs(10);
-          thread::sleep(ten_second);
-          continue;
-        };
-        //Sucess establist db connection
-        let table_block = BlockTable::new();
-        let table_tranction = TransactionTable::new();
-        let table_transaction_in = TransactionInTable::new();
-        let table_transaction_out = TransactionOutTable::new();
-
-        let table_outpoint_balance = OutpointRuneBalanceTable::new();
-        let table_transaction_rune = TransactionRuneTable::new();
-        let table_transaction_rune_entry = TransactionRuneEntryTable::new();
-        let _transactional_insert = |cache: &IndexBlock| {
-          let res: Result<(), diesel::result::Error> =
-            connection.build_transaction().read_write().run(|conn| {
-              log::info!(
-                "Commit cache {} with {} blocks, {} txs, {} txins, {} txouts, {} outpoint_balances, {} rune entries",
-                cache.block_height,
-                cache.blocks.len(),
-                cache.transactions.len(),
-                cache.transaction_ins.len(),
-                cache.transaction_outs.len(),
-                cache.outpoint_balances.len(),
-                cache.rune_entries.len()
-              );
-              //must be safe to unwrap;
-              let res = table_block.insert_vector(&cache.blocks, conn);
-              if res.is_err() {
-                log::info!("Insert blocks error {:?}", &res);
-                res?;
-              }
-              let res = table_tranction.insert_vector(&cache.transactions, conn);
-              if res.is_err() {
-                log::info!("Insert transactions error {:?}", &res);
-                res?;
-              }
-              let res = table_transaction_in.insert_vector(&cache.transaction_ins, conn);
-              if res.is_err() {
-                log::info!("Insert transaction ins error {:?}", &res);
-                res?;
-              }
-              let res = table_transaction_out.insert_vector(&cache.transaction_outs, conn);
-              if res.is_err() {
-                log::info!("Insert transaction outs error {:?}", &res);
-                res?;
-              }
-
-              if cache.tx_ins.len() > 0 {
-                table_transaction_out.spends(&cache.tx_ins, conn)?;
-              }
-
-              let res = table_outpoint_balance.insert_vector(&cache.outpoint_balances, conn);
-              if res.is_err() {
-                log::info!("Insert outpoint balances error {:?}", &res);
-                res?;
-              }
-              let res = table_transaction_rune.insert_vector(&cache.tx_runes, conn);
-              if res.is_err() {
-                log::info!("Insert transaction runes error {:?}", &res);
-                res?;
-              }
-              let res = table_transaction_rune_entry.insert_vector(&cache.rune_entries, conn);
-              if res.is_err() {
-                log::info!("Insert rune entries error {:?}", &res);
-                res?;
-              }
-              Ok(())
-            });
-          if res.is_err() {
-            log::info!("Transaction index result {:?}", &res);
-            //panic!("Transaction index result {:?}", &res);
-          }
-        };
-        //Insert records in transactional manner for each block
-        //self.index_cache.iter().for_each(transactional_insert);
-        //Insert all records without transactional
-        //Insert into blocks
-        let mut total_blocks = vec![];
-        let mut total_transactions = vec![];
-        let mut total_transaction_ins = vec![];
-        let mut total_transaction_outs = vec![];
-        let mut total_outpoint_balances = vec![];
-        let mut total_tx_runes = vec![];
-        let mut total_transaction_rune_entries = vec![];
-        let mut total_tx_ins = vec![];
-        loop {
-          let Some(IndexBlock {
-            block_height: _,
-            tx_ins,
-            blocks,
-            transactions,
-            transaction_ins,
-            transaction_outs,
-            outpoint_balances,
-            tx_runes,
-            rune_entries,
-          }) = self.index_cache.pop_front()
-          else {
-            break;
-          };
-          total_blocks.extend(blocks);
-          total_transactions.extend(transactions);
-          total_transaction_ins.extend(transaction_ins);
-          total_transaction_outs.extend(transaction_outs);
-          total_outpoint_balances.extend(outpoint_balances);
-          total_tx_runes.extend(tx_runes);
-          total_transaction_rune_entries.extend(rune_entries);
-          total_tx_ins.extend(tx_ins);
-        }
-        let mut start = Instant::now();
-        let _res = table_block.insert_vector(&total_blocks, &mut connection);
-        log::info!(
-          "Inserted {} blocks in {} ms",
-          total_blocks.len(),
-          start.elapsed().as_millis()
-        );
-        start = Instant::now();
-        let _res = table_tranction.insert_vector(&total_transactions, &mut connection);
-        log::info!(
-          "Inserted {} transactions in {} ms",
-          total_transactions.len(),
-          start.elapsed().as_millis()
-        );
-        start = Instant::now();
-        let _res = table_transaction_in.insert_vector(&total_transaction_ins, &mut connection);
-        log::info!(
-          "Inserted {} txins in {} ms",
-          total_transaction_ins.len(),
-          start.elapsed().as_millis()
-        );
-        start = Instant::now();
-        let _res = table_transaction_out.insert_vector(&total_transaction_outs, &mut connection);
-        log::info!(
-          "Inserted {} txouts in {} ms",
-          total_transaction_outs.len(),
-          start.elapsed().as_millis()
-        );
-        start = Instant::now();
-        let _res = table_outpoint_balance.insert_vector(&total_outpoint_balances, &mut connection);
-        log::info!(
-          "Inserted {} outpoint balances in {} ms",
-          total_outpoint_balances.len(),
-          start.elapsed().as_millis()
-        );
-        start = Instant::now();
-        let _res = table_transaction_rune.insert_vector(&total_tx_runes, &mut connection);
-        log::info!(
-          "Inserted {} transaction runes in {} ms",
-          total_tx_runes.len(),
-          start.elapsed().as_millis()
-        );
-        start = Instant::now();
-        let _res = table_transaction_rune_entry
-          .insert_vector(&total_transaction_rune_entries, &mut connection);
-        log::info!(
-          "Inserted {} runes {} ms",
-          total_transaction_rune_entries.len(),
-          start.elapsed().as_millis()
-        );
-        if total_tx_ins.len() > 0 {
-          start = Instant::now();
-          table_outpoint_balance.spends(&total_tx_ins, &mut connection)?;
-          log::info!(
-            "Updated {} spent txouts for outpoint balance in {} ms",
-            total_tx_ins.len(),
-            start.elapsed().as_millis()
-          );
-          start = Instant::now();
-          table_transaction_out.spends(&total_tx_ins, &mut connection)?;
-          log::info!(
-            "Updated {} spent txouts for transaction out in {} ms",
-            total_tx_ins.len(),
-            start.elapsed().as_millis()
-          );
-        }
-        self.index_cache.clear();
-        break;
+  pub fn commit(&self) -> anyhow::Result<Vec<JoinHandle<()>>> {
+    let mut handles = vec![];
+    let mut processing_cache = vec![];
+    if let Ok(mut cache) = self.index_cache.write() {
+      while let Some(index_block) = cache.pop_front() {
+        processing_cache.push(index_block);
       }
     }
-    Ok(len)
+    if processing_cache.len() > 0 {
+      //let mut connection = self.get_connection().map_err(|err| anyhow!(err))?;
+      //Sucess establist db connection
+      let table_block = BlockTable::new();
+      let table_tranction = TransactionTable::new();
+      let table_transaction_in = TransactionInTable::new();
+      let table_transaction_out = TransactionOutTable::new();
+
+      let table_outpoint_balance = OutpointRuneBalanceTable::new();
+      let table_transaction_rune = TransactionRuneTable::new();
+      let table_transaction_rune_entry = TransactionRuneEntryTable::new();
+
+      //Insert records in transactional manner for each block
+      //self.index_cache.iter().for_each(transactional_insert);
+      //Insert all records without transactional
+      //Insert into blocks
+      let mut total_blocks = vec![];
+      let mut total_transactions = vec![];
+      let mut total_transaction_ins = vec![];
+      let mut total_transaction_outs = vec![];
+      let mut total_outpoint_balances = vec![];
+      let mut total_tx_runes = vec![];
+      let mut total_rune_entries = vec![];
+      let mut total_tx_ins = vec![];
+      for index_block in processing_cache {
+        let Some(IndexBlock {
+          block_height: _block_height,
+          raw_tx_ins,
+          blocks,
+          transactions,
+          transaction_ins,
+          transaction_outs,
+          outpoint_balances,
+          tx_runes,
+          rune_entries,
+        }) = Arc::try_unwrap(index_block).ok()
+        else {
+          break;
+        };
+        if let Ok(ref mut blocks) = blocks.into_inner() {
+          total_blocks.append(blocks);
+        }
+        if let Ok(ref mut transactions) = transactions.into_inner() {
+          total_transactions.append(transactions);
+        }
+        if let Ok(ref mut transaction_ins) = transaction_ins.into_inner() {
+          total_transaction_ins.append(transaction_ins);
+        }
+        if let Ok(ref mut transaction_outs) = transaction_outs.into_inner() {
+          total_transaction_outs.append(transaction_outs);
+        }
+        if let Ok(ref mut outpoint_balances) = outpoint_balances.into_inner() {
+          total_outpoint_balances.append(outpoint_balances);
+        }
+        if let Ok(ref mut rune_entries) = rune_entries.into_inner() {
+          total_rune_entries.append(rune_entries);
+        }
+        if let Ok(ref mut tx_runes) = tx_runes.into_inner() {
+          total_tx_runes.append(tx_runes);
+        }
+        if let Ok(ref mut raw_tx_ins) = raw_tx_ins.into_inner() {
+          total_tx_ins.append(raw_tx_ins);
+        }
+      }
+      if let Ok(ref mut res) = table_block.insert_vector(total_blocks, self.connection_pool.clone())
+      {
+        handles.append(res);
+      }
+      if let Ok(ref mut res) =
+        table_tranction.insert_vector(total_transactions, self.connection_pool.clone())
+      {
+        handles.append(res);
+      }
+      if let Ok(ref mut res) =
+        table_transaction_in.insert_vector(total_transaction_ins, self.connection_pool.clone())
+      {
+        handles.append(res);
+      }
+      if let Ok(ref mut res) =
+        table_transaction_out.insert_vector(total_transaction_outs, self.connection_pool.clone())
+      {
+        handles.append(res);
+      }
+      if let Ok(ref mut res) =
+        table_outpoint_balance.insert_vector(total_outpoint_balances, self.connection_pool.clone())
+      {
+        handles.append(res);
+      }
+      if let Ok(ref mut res) =
+        table_transaction_rune.insert_vector(total_tx_runes, self.connection_pool.clone())
+      {
+        handles.append(res);
+      }
+      if let Ok(ref mut res) =
+        table_transaction_rune_entry.insert_vector(total_rune_entries, self.connection_pool.clone())
+      {
+        handles.append(res);
+      }
+      if total_tx_ins.len() > 0 {
+        if let Ok(ref mut res) =
+          table_outpoint_balance.spends(&total_tx_ins, self.connection_pool.clone())
+        {
+          handles.append(res);
+        }
+        if let Ok(ref mut res) =
+          table_transaction_out.spends(&total_tx_ins, self.connection_pool.clone())
+        {
+          handles.append(res);
+        }
+      }
+    }
+    Ok(handles)
   }
 }

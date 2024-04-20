@@ -67,10 +67,10 @@ impl<'conn> TransactionRuneEntryTable {
 }
 
 impl InsertRecords for TransactionRuneEntryTable {
+  const TABLE_NAME: &'static str = "transaction_rune_entry";
   const CHUNK_SIZE: usize = (u16::MAX / NUMBER_OF_FIELDS) as usize;
   type Record = NewTxRuneEntry;
   fn insert_slice(
-    &self,
     records: &[Self::Record],
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {

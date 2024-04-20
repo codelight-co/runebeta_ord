@@ -44,7 +44,7 @@ impl<'index> Updater<'index> {
   pub(crate) fn update_index(
     &mut self,
     mut wtx: WriteTransaction,
-    extension: Arc<Mutex<IndexExtension>>,
+    extension: Arc<IndexExtension>,
   ) -> Result {
     let start = Instant::now();
     let starting_height = u32::try_from(self.index.client.get_block_count()?).unwrap() + 1;
@@ -82,41 +82,37 @@ impl<'index> Updater<'index> {
     let mut uncommitted = 0;
     let mut value_cache = HashMap::new();
     let setting_index_inscriptions = self.index.settings.index_inscriptions();
+    let fist_inscription_height = self.index.first_inscription_height.clone();
     log::debug!(
       "Fist inscription height {}. Index inscription {}",
       self.index.first_inscription_height,
       setting_index_inscriptions
     );
+    let lastest_block_height = extension.get_latest_block_height();
     while let Ok(block) = rx.recv() {
       //To create backup db set environment ORD_LAST_BLOCK_HEIGHT
-      if self.height >= extension.try_lock().unwrap().get_latest_block_height() {
+      let current_height = self.height.clone();
+      if current_height >= lastest_block_height {
         break;
       }
-      //Better do extension index before ordinal index, inside ordinal indexing, the block_height is increasing to 1
-      let index_inscriptions =
-        self.height >= self.index.first_inscription_height && setting_index_inscriptions;
-      if index_inscriptions {
-        if let Ok(mut extension) = extension.try_lock() {
-          let _res = extension.index_block(self.height as i64, &block.header, &block.txdata);
-        }
+      if current_height >= fist_inscription_height.clone() && setting_index_inscriptions {
+        let clone_extension = Arc::clone(&extension);
+        let block_header = block.header.clone();
+        let block_data = block.txdata.clone();
+        thread::spawn(move || {
+          //Better do extension index before ordinal index, inside ordinal indexing, the block_height is increasing to 1
+          let _res = clone_extension.index_block(current_height as i64, &block_header, &block_data);
+        });
       }
-      let block_header = block.header.clone();
-      let block_txdata = block.txdata.clone();
+
       self.index_block(
         &mut outpoint_sender,
         &mut value_receiver,
         &mut wtx,
-        extension.clone(),
+        Arc::clone(&extension),
         block,
         &mut value_cache,
       )?;
-      // let index_inscriptions =
-      //   self.height >= self.index.first_inscription_height && setting_index_inscriptions;
-      // if index_inscriptions {
-      //   if let Ok(mut extension) = extension.try_lock() {
-      //     let _res = extension.index_block(self.height as i64, &block_header, &block_txdata);
-      //   }
-      // }
       if let Some(progress_bar) = &mut progress_bar {
         progress_bar.inc(1);
 
@@ -340,7 +336,7 @@ impl<'index> Updater<'index> {
     outpoint_sender: &mut Sender<OutPoint>,
     value_receiver: &mut Receiver<u64>,
     wtx: &mut WriteTransaction,
-    extension: Arc<Mutex<IndexExtension>>,
+    extension: Arc<IndexExtension>,
     block: BlockData,
     value_cache: &mut HashMap<OutPoint, u64>,
   ) -> Result<()> {
@@ -731,12 +727,12 @@ impl<'index> Updater<'index> {
   fn commit(
     &mut self,
     wtx: WriteTransaction,
-    extension: Arc<Mutex<IndexExtension>>,
+    extension: Arc<IndexExtension>,
     value_cache: HashMap<OutPoint, u64>,
   ) -> Result {
     log::info!(
-      "Committing at block height {}, {} outputs traversed, {} in map, {} cached",
-      self.height,
+      "Committing block height {}, {} outputs traversed, {} in map, {} cached",
+      self.height - 1,
       self.outputs_traversed,
       self.range_cache.len(),
       self.outputs_cached
@@ -772,15 +768,20 @@ impl<'index> Updater<'index> {
     Index::increment_statistic(&wtx, Statistic::SatRanges, self.sat_ranges_since_flush)?;
     self.sat_ranges_since_flush = 0;
     Index::increment_statistic(&wtx, Statistic::Commits, 1)?;
-    if let Ok(mut extension) = extension.lock() {
-      let res = extension.commit();
-      if res.is_err() {
-        log::error!("Extension commit err {:?}", &res);
-      }
-    }
+    let commit_res = extension.commit().map_err(|err| {
+      log::error!("Extension commit err {:?}", &err);
+    });
+
+    //Log result
     wtx.commit()?;
     Reorg::update_savepoints(self.index, self.height)?;
-
+    //Wait until all sub threads are finished
+    if let Ok(handles) = commit_res {
+      handles.into_iter().for_each(|hanlde| {
+        let _ = hanlde.join();
+      });
+      extension.log_finish_indexing((self.height - 1) as i64);
+    }
     Ok(())
   }
 }
