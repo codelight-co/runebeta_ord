@@ -168,11 +168,12 @@ impl IndexExtension {
     log::info!("Index block {}", &height);
     //Index rune transaction only or explicit define param ORD_SUPERSAT_INDEX_ALL_TRANSACTIONS
     let index_all_tx = self.index_all_transaction.clone();
+    //We index block first then indexBlock undefined here
     let index_block = self.get_block_cache(height as u64);
-    if index_block.is_none() && !index_all_tx {
-      //Don't index block unrelated with rune
-      return Ok(());
-    }
+    // if index_block.is_none() && !index_all_tx {
+    //   //Don't index block unrelated with rune
+    //   return Ok(());
+    // }
     let mut rune_tx_hashs = index_block
       .map(|index_block| {
         index_block

@@ -92,13 +92,14 @@ impl<'index> Updater<'index> {
       if self.height >= extension.try_lock().unwrap().get_latest_block_height() {
         break;
       }
-      // let index_inscriptions =
-      //   self.height >= self.index.first_inscription_height && setting_index_inscriptions;
-      // if index_inscriptions {
-      //   if let Ok(mut extension) = extension.try_lock() {
-      //     let _res = extension.index_block(self.height as i64, &block.header, &block.txdata);
-      //   }
-      // }
+      //Better do extension index before ordinal index, inside ordinal indexing, the block_height is increasing to 1
+      let index_inscriptions =
+        self.height >= self.index.first_inscription_height && setting_index_inscriptions;
+      if index_inscriptions {
+        if let Ok(mut extension) = extension.try_lock() {
+          let _res = extension.index_block(self.height as i64, &block.header, &block.txdata);
+        }
+      }
       let block_header = block.header.clone();
       let block_txdata = block.txdata.clone();
       self.index_block(
@@ -109,13 +110,13 @@ impl<'index> Updater<'index> {
         block,
         &mut value_cache,
       )?;
-      let index_inscriptions =
-        self.height >= self.index.first_inscription_height && setting_index_inscriptions;
-      if index_inscriptions {
-        if let Ok(mut extension) = extension.try_lock() {
-          let _res = extension.index_block(self.height as i64, &block_header, &block_txdata);
-        }
-      }
+      // let index_inscriptions =
+      //   self.height >= self.index.first_inscription_height && setting_index_inscriptions;
+      // if index_inscriptions {
+      //   if let Ok(mut extension) = extension.try_lock() {
+      //     let _res = extension.index_block(self.height as i64, &block_header, &block_txdata);
+      //   }
+      // }
       if let Some(progress_bar) = &mut progress_bar {
         progress_bar.inc(1);
 
