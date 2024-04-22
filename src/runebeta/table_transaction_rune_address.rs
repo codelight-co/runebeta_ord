@@ -15,11 +15,11 @@ impl TransactionRuneAddressTable {
 }
 
 impl InsertRecords for TransactionRuneAddressTable {
+  const TABLE_NAME: &'static str = "tx_rune_address";
   const CHUNK_SIZE: usize = (u16::MAX / NUMBER_OF_FIELDS) as usize;
   type Record = NewTransactionRuneAddress;
 
   fn insert_slice(
-    &self,
     records: &[Self::Record],
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {

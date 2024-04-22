@@ -259,7 +259,6 @@ pub struct TransactionOut {
   pub dust_value: BigDecimal,
   pub address: Option<String>,
   pub script_pubkey: String,
-  pub spent: bool,
   pub runestone: String,
   pub cenotaph: String,
   pub edicts: i64,
@@ -283,7 +282,6 @@ pub struct NewTransactionOut {
   pub dust_value: BigDecimal,
   pub address: Option<String>,
   pub script_pubkey: String,
-  pub spent: bool,
   pub runestone: String,
   pub cenotaph: String,
   pub edicts: i64,
@@ -356,7 +354,6 @@ pub struct TransactionRune {
   pub block_height: i64,
   pub tx_index: i32,
   pub tx_hash: String,
-  pub rune_id: String,
 }
 
 #[derive(Insertable, AsChangeset, Debug)]
@@ -366,7 +363,6 @@ pub struct NewTransactionRune {
   pub block_height: i64,
   pub tx_index: i32,
   pub tx_hash: String,
-  pub rune_id: String,
 }
 
 //TransactionRuneIdAddress
@@ -378,9 +374,7 @@ pub struct TransactionRuneAddress {
   pub block_height: i64,
   pub tx_index: i32,
   pub tx_hash: String,
-  pub rune_id: String,
   pub address: String,
-  pub spent: bool,
 }
 
 #[derive(Insertable, AsChangeset, Debug)]
@@ -390,9 +384,7 @@ pub struct NewTransactionRuneAddress {
   pub block_height: i64,
   pub tx_index: i32,
   pub tx_hash: String,
-  pub rune_id: String,
   pub address: String,
-  pub spent: bool,
 }
 
 #[derive(Queryable, Selectable)]
@@ -408,7 +400,6 @@ pub struct OutpointRuneBalance {
   pub rune_id: String,
   pub address: String,
   pub balance_value: BigDecimal,
-  pub spent: bool,
 }
 
 #[derive(Insertable, Clone, Debug)]
@@ -422,5 +413,4 @@ pub struct NewOutpointRuneBalance {
   pub rune_id: String,
   pub address: String,
   pub balance_value: BigDecimal,
-  pub spent: bool,
 }

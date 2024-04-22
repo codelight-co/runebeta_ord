@@ -11,7 +11,6 @@ CREATE TABLE outpoint_rune_balances (
     vout BIGINT NOT NULL,
     rune_id VARCHAR NOT NULL,
     address VARCHAR NOT NULL, --Parse from script_pubkey
-    spent BOOLEAN NOT NULL DEFAULT false, 
     -- rune_block INTEGER NOT NULL,
     -- rune_tx SMALLINT NOT NULL,
     --For store u128 value

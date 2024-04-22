@@ -44,7 +44,6 @@ CREATE TABLE transaction_outs (
   dust_value NUMERIC NOT NULL,
   address VARCHAR NULL, --Parse from script_pubkey
   script_pubkey TEXT NOT NULL,
-  spent BOOLEAN NOT NULL DEFAULT false,
   runestone VARCHAR NOT NULL DEFAULT '{}',
   cenotaph VARCHAR NOT NULL DEFAULT '{}',
   -- runestone jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -86,8 +85,7 @@ CREATE TABLE txid_runes (
   id BIGSERIAL PRIMARY KEY,
   block_height BIGINT NOT NULL,
   tx_index INTEGER NOT NULL DEFAULT 0,
-  tx_hash VARCHAR NOT NULL,
-  rune_id VARCHAR NOT NULL
+  tx_hash VARCHAR NOT NULL
 );
 
 CREATE TABLE txid_rune_addresss (
@@ -95,7 +93,5 @@ CREATE TABLE txid_rune_addresss (
   block_height BIGINT NOT NULL,
   tx_index INTEGER NOT NULL DEFAULT 0,
   tx_hash VARCHAR NOT NULL,
-  rune_id VARCHAR NOT NULL,
-  address VARCHAR NOT NULL,
-  spent BOOLEAN NOT NULL
+  address VARCHAR NOT NULL
 );

@@ -43,10 +43,10 @@ impl<'conn> BlockTable {
 }
 
 impl InsertRecords for BlockTable {
+  const TABLE_NAME: &'static str = "blocks";
   const CHUNK_SIZE: usize = (u16::MAX / NUMBER_OF_FIELDS) as usize;
   type Record = NewBlock;
   fn insert_slice(
-    &self,
     records: &[Self::Record],
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {
