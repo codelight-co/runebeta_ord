@@ -4,16 +4,16 @@ use std::{
   time::Instant,
 };
 
-use bitcoin::Txid;
 use diesel::{
   associations::HasTable,
   r2d2::{ConnectionManager, Pool},
-  ExpressionMethods, PgConnection, RunQueryDsl,
+  PgConnection, RunQueryDsl,
 };
 
 use super::models::NewOutpointRuneBalance;
 use crate::{
-  schema::outpoint_rune_balances::dsl::*, split_input, InsertRecords, CONNECTION_POOL_SIZE,
+  create_query_move_outpoint_rune_balances, schema::outpoint_rune_balances::dsl::*, split_input,
+  InsertRecords,
 };
 pub const NUMBER_OF_FIELDS: u16 = 10;
 #[derive(Clone)]
@@ -25,17 +25,13 @@ impl<'conn> OutpointRuneBalanceTable {
   }
   pub fn spends(
     &self,
-    txins: &Vec<(Txid, i64)>,
+    txins: Vec<String>,
     conn_pool: Pool<ConnectionManager<PgConnection>>,
   ) -> Result<Vec<JoinHandle<()>>, diesel::result::Error> {
     let mut handles = vec![];
-    let txout_ids = txins
-      .iter()
-      .map(|(txid, ind)| format!("{}:{}", txid.to_string(), ind))
-      .collect::<Vec<String>>();
     //Split update into small query for improve performance
-    let chunk_size = cmp::min(u16::MAX as usize, txout_ids.len() / CONNECTION_POOL_SIZE);
-    let chunks = split_input(txout_ids, chunk_size);
+    let chunk_size = cmp::min(u16::MAX as usize, txins.len());
+    let chunks = split_input(txins, chunk_size);
     for chunk in chunks {
       let pool = conn_pool.clone();
 
@@ -46,14 +42,16 @@ impl<'conn> OutpointRuneBalanceTable {
         loop {
           if let Ok(mut connection) = pool.get() {
             let start = Instant::now();
-            let res = diesel::update(outpoint_rune_balances)
-              .filter(txout_id.eq_any(&thread_chunk))
-              .set(spent.eq(true))
-              .execute(&mut connection);
+            let query = create_query_move_outpoint_rune_balances(&thread_chunk);
+            let res = query.execute(&mut connection);
+            // let res = diesel::update(outpoint_rune_balances)
+            //   .filter(txout_id.eq_any(&thread_chunk))
+            //   .set(spent.eq(true))
+            //   .execute(&mut connection);
             match res {
               Ok(size) => {
                 log::info!(
-                  "Updated {} records into the table {} in {} ms",
+                  "Move out {} records from the table {} in {} ms",
                   size,
                   Self::TABLE_NAME,
                   start.elapsed().as_millis()

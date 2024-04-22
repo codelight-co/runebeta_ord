@@ -9,12 +9,18 @@ mod table_transaction_out;
 mod table_transaction_rune;
 mod table_transaction_rune_address;
 mod table_transaction_rune_entry;
+use anyhow::anyhow;
 use diesel::{
+  query_builder::SqlQuery,
   r2d2::{ConnectionManager, Pool},
   PgConnection,
 };
 pub use extension::IndexExtension;
-use std::thread::{self, JoinHandle};
+use lazy_static::lazy_static;
+use std::{
+  env,
+  thread::{self, JoinHandle},
+};
 use std::{fmt::Debug, time::Instant};
 pub use table_block::BlockTable;
 pub use table_outpoint_rune_balance::OutpointRuneBalanceTable;
@@ -25,7 +31,71 @@ pub use table_transaction_rune_address::TransactionRuneAddressTable;
 pub use table_transaction_rune_entry::TransactionRuneEntryTable;
 #[cfg(test)]
 mod testing;
-pub const CONNECTION_POOL_SIZE: usize = 10;
+const SAFE_RECORDS_NUMBER_PER_QUERY: u32 = 1024;
+lazy_static! {
+  static ref CONNECTION_POOL_SIZE: u32 = env::var("ORD_SUPERSATS_CONNECTION_POOL_SIZE")
+    .map_err(|err| anyhow!(err))
+    .and_then(|size| size.parse::<u32>().map_err(|err| anyhow!(err)))
+    .unwrap_or(10);
+  // static ref POOL: Pool<ConnectionManager<PgConnection>> = {
+  //   let db_url = env::var("DATABASE_URL").expect("Database url not set");
+  //   let manager = ConnectionManager::<PgConnection>::new(db_url);
+  //   Pool::builder()
+  //     .max_size(*CONNECTION_POOL_SIZE)
+  //     .test_on_check_out(true)
+  //     .build(manager)
+  //     .expect("Failed to create db pool")
+  // };
+}
+/*
+ * https://schneide.blog/2022/11/07/copying-and-moving-rows-between-tables-in-postgresql/
+ */
+
+pub fn create_query_move_spent_transaction_outs(txout_ids: &Vec<String>) -> SqlQuery {
+  let params = txout_ids
+    .iter()
+    .map(|id| format!("'{}'", id))
+    .collect::<Vec<String>>()
+    .join(",");
+
+  let sql = format!(
+    r#"
+      WITH selection AS (
+        DELETE FROM transaction_outs
+        WHERE txout_id in ({})
+        RETURNING *
+      )
+      INSERT INTO spent_transaction_outs
+        SELECT * FROM selection
+      ON CONFLICT DO NOTHING;
+      "#,
+    params
+  );
+  diesel::sql_query(sql)
+}
+
+pub fn create_query_move_outpoint_rune_balances(txout_ids: &Vec<String>) -> SqlQuery {
+  let params = txout_ids
+    .iter()
+    .map(|id| format!("'{}'", id))
+    .collect::<Vec<String>>()
+    .join(",");
+
+  let sql = format!(
+    r#"
+      WITH selection AS (
+        DELETE FROM outpoint_rune_balances
+        WHERE txout_id in ({})
+        RETURNING *
+      )
+      INSERT INTO spent_outpoint_rune_balances
+        SELECT * FROM selection
+      ON CONFLICT DO NOTHING  ;
+    "#,
+    params
+  );
+  diesel::sql_query(sql)
+}
 pub trait InsertRecords {
   const CHUNK_SIZE: usize;
   const TABLE_NAME: &'static str;
@@ -57,8 +127,9 @@ pub trait InsertRecords {
               log::info!("Insert error {:?}", res);
             } else {
               log::info!(
-                "Inserted {} records in {} ms",
+                "Inserted {} records into table {} in {} ms",
                 thread_chunk.len(),
+                Self::TABLE_NAME,
                 start.elapsed().as_millis()
               );
             }
@@ -83,17 +154,26 @@ pub trait InsertRecords {
 
 //Calculate chunk size when device input vector
 pub fn calculate_chunk_size(input_len: usize, max_size: usize) -> usize {
-  if input_len <= max_size {
-    input_len
-  } else {
-    let number_of_chunk = input_len / max_size;
-    if number_of_chunk * max_size == input_len {
-      max_size
-    } else {
-      //Total chunk number will be number_of_chunk + 1
-      input_len / (number_of_chunk + 1)
-    }
+  //if input size is relative smalll small- we hardcode a threshold here
+  let mut required_chunks = input_len / max_size;
+  if required_chunks * max_size < input_len {
+    required_chunks = required_chunks + 1;
   }
+  let mut number_of_chunk = required_chunks;
+  let mut chunk_size = input_len / number_of_chunk;
+  /*
+   * We need to balance beetween number of chunk and chunk size
+   * If total input is small, we use a small number of chunk
+   * otherwire we increate the number of chunks for reducing the size of each chunk to a predefined value 256
+   */
+  while number_of_chunk < *CONNECTION_POOL_SIZE as usize
+    && chunk_size > SAFE_RECORDS_NUMBER_PER_QUERY as usize
+  {
+    number_of_chunk = number_of_chunk + 1;
+    chunk_size = input_len / number_of_chunk;
+  }
+  // Todo: Allocate all input_len to chunk with the same size
+  chunk_size
 }
 /*
 * Split the input vector into chunks for execute pg query

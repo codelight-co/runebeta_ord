@@ -1,4 +1,5 @@
 use crate::{
+  index::lot::Lot,
   runebeta::{
     models::{MintEntryType, NewOutpointRuneBalance},
     OutpointRuneBalanceTable,
@@ -13,6 +14,7 @@ use super::{
   },
   table_transaction::TransactionTable,
   BlockTable, TransactionInTable, TransactionOutTable, TransactionRuneEntryTable,
+  CONNECTION_POOL_SIZE,
 };
 use bigdecimal::BigDecimal;
 use bitcoin::{
@@ -39,8 +41,8 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 #[derive(Debug, Default)]
 pub struct IndexBlock {
   block_height: u64,
-  // Raw txin for update previous txouts'spent => true
-  raw_tx_ins: Mutex<Vec<(Txid, i64)>>,
+  // Raw txind:ind for move out previous txouts to the spent_{table}
+  raw_tx_ins: Mutex<Vec<String>>,
   blocks: Mutex<Vec<NewBlock>>,
   transactions: Mutex<Vec<NewTransaction>>,
   transaction_ins: Mutex<Vec<NewTransactionIn>>,
@@ -99,7 +101,13 @@ impl IndexBlock {
       log::info!("Cannot lock the rune_balances for insert item");
     }
   }
-
+  fn add_tx_rune(&self, item: NewTransactionRune) {
+    if let Ok(ref mut tx_runes) = self.tx_runes.try_lock() {
+      (*tx_runes).push(item);
+    } else {
+      log::info!("Cannot lock the tx_runes for insert item");
+    }
+  }
   fn append_tx_rune(&self, items: &mut Vec<NewTransactionRune>) {
     if let Ok(ref mut tx_runes) = self.tx_runes.try_lock() {
       tx_runes.append(items);
@@ -107,7 +115,7 @@ impl IndexBlock {
       log::info!("Cannot lock the tx_runes for insert item");
     }
   }
-  fn append_raw_ins(&self, items: &mut Vec<(Txid, i64)>) {
+  fn append_raw_ins(&self, items: &mut Vec<String>) {
     if let Ok(ref mut raw_tx_ins) = self.raw_tx_ins.try_lock() {
       raw_tx_ins.append(items);
     } else {
@@ -140,6 +148,7 @@ pub struct IndexExtension {
   //Todo: index "Rune transaction" only - Must deeply understand which txs are related with some runes
   _index_all_transaction: bool,
   last_block_height: u32,
+  indexed_block_height: Mutex<Option<u32>>,
   connection_pool: Pool<ConnectionManager<PgConnection>>,
   index_cache: RwLock<VecDeque<Arc<IndexBlock>>>,
   //Store indexer start time
@@ -161,7 +170,11 @@ impl IndexExtension {
     let mut connection_pool = None;
     loop {
       let manager = ConnectionManager::<PgConnection>::new(database_url.as_str());
-      let Ok(pool) = Pool::builder().test_on_check_out(true).build(manager) else {
+      let Ok(pool) = Pool::builder()
+        .max_size(*CONNECTION_POOL_SIZE)
+        .test_on_check_out(true)
+        .build(manager)
+      else {
         let ten_second = time::Duration::from_secs(10);
         thread::sleep(ten_second);
         log::info!("Try connect to reconnect to the db");
@@ -182,6 +195,7 @@ impl IndexExtension {
     Self {
       chain,
       last_block_height,
+      indexed_block_height: Mutex::new(None),
       _index_all_transaction: index_all_transaction == "1",
       connection_pool: connection_pool.expect("Connection pool must successfull created"),
       index_cache: Default::default(),
@@ -191,7 +205,13 @@ impl IndexExtension {
   pub fn get_latest_block_height(&self) -> u32 {
     self.last_block_height
   }
-
+  pub fn get_indexed_block(&self) -> Option<u32> {
+    self
+      .indexed_block_height
+      .lock()
+      .ok()
+      .and_then(|height| (*height).clone())
+  }
   pub fn get_block_cache(&self, height: u64) -> Option<Arc<IndexBlock>> {
     if let Ok(cache) = self.index_cache.read() {
       for cache in cache.iter() {
@@ -232,7 +252,6 @@ impl IndexExtension {
       .get(&height)
       .map(|v| v.clone())
       .unwrap_or_default();
-
     log::info!(
       "[Benchmark]#{}|{}|{}|{}",
       &height,
@@ -240,6 +259,9 @@ impl IndexExtension {
       current,
       current - start
     );
+    if let Ok(mut block_height) = self.indexed_block_height.lock() {
+      block_height.replace(height as u32);
+    }
   }
   /*
    * This function is call after index other info
@@ -247,10 +269,11 @@ impl IndexExtension {
   pub fn index_block(
     &self,
     height: i64,
-    block_header: &Header,
-    block_data: &Vec<(Transaction, Txid)>,
+    block_header: Header,
+    block_data: &mut Vec<(Transaction, Txid)>,
   ) -> Result<(), diesel::result::Error> {
     self.log_start_indexing(height);
+    let start = Instant::now();
     let new_block = NewBlock {
       block_time: block_header.time as i64,
       block_height: height,
@@ -262,9 +285,9 @@ impl IndexExtension {
     let mut transaction_ins: Vec<NewTransactionIn> = vec![];
     let mut tx_ins = vec![];
 
-    for (tx_index, (tx, txid)) in block_data.iter().enumerate() {
+    for (tx_index, (tx, txid)) in block_data.into_iter().enumerate() {
       let tx_hash = txid.to_string();
-      let artifact = Runestone::decipher(tx);
+      let artifact = Runestone::decipher(&tx);
       let Transaction {
         version,
         lock_time,
@@ -279,12 +302,20 @@ impl IndexExtension {
         tx_hash,
       };
       transactions.push(new_transaction);
+      // input.iter().for_each(|tx_in| {
+      //   tx_ins.push((
+      //     tx_in.previous_output.txid.clone(),
+      //     tx_in.previous_output.vout as i64,
+      //   ))
+      // });
       input.iter().for_each(|tx_in| {
-        tx_ins.push((
-          tx_in.previous_output.txid.clone(),
-          tx_in.previous_output.vout as i64,
+        tx_ins.push(format!(
+          "{}:{}",
+          tx_in.previous_output.txid.to_string(),
+          tx_in.previous_output.vout
         ))
       });
+
       let mut new_transaction_ins = input
         .iter()
         .map(|txin| {
@@ -326,6 +357,15 @@ impl IndexExtension {
     index_block.append_transaction_ins(&mut transaction_ins);
     index_block.append_transaction_outs(&mut transaction_outs);
     index_block.append_raw_ins(&mut tx_ins);
+    log::debug!(
+      "Indexer finished index transactions for block {} at {} in {} ms",
+      &height,
+      SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_millis(),
+      (Instant::now() - start).as_millis()
+    );
     Ok(())
   }
   pub fn index_transaction_output(
@@ -389,7 +429,6 @@ impl IndexExtension {
           asm,
           dust_value: BigDecimal::from(dust_value),
           script_pubkey: tx_out.script_pubkey.to_hex_string(),
-          spent: false,
           runestone: runestone.unwrap_or_else(|| "{}".to_string()),
           cenotaph: cenotaph.unwrap_or_else(|| "{}".to_string()),
           edicts,
@@ -454,6 +493,7 @@ impl IndexExtension {
     vout: usize,
     balances: &Vec<(RuneId, BigDecimal)>,
   ) -> Result<usize, diesel::result::Error> {
+    log::info!("index_outpoint_balances");
     let mut len = 0;
     let network = self.chain.network();
     let mut tx_runes = vec![];
@@ -468,7 +508,6 @@ impl IndexExtension {
           block_height,
           tx_index: tx_index as i32,
           tx_hash: txid.to_string(),
-          rune_id: rune_id.to_string(),
         };
         tx_runes.push(tx_rune);
         let outpoint_balance = NewOutpointRuneBalance {
@@ -479,7 +518,6 @@ impl IndexExtension {
           vout: vout as i64,
           rune_id: rune_id.to_string(),
           address,
-          spent: false,
           balance_value: balance.clone(),
         };
         len = len + 1;
@@ -495,6 +533,59 @@ impl IndexExtension {
       }
     };
     index_block.append_tx_rune(&mut tx_runes);
+    index_block.append_outpoint_rune_balances(&mut outpoint_balances);
+    Ok(len)
+  }
+  pub fn index_outpoint_balances_v2(
+    &self,
+    block_height: i64,
+    tx_index: u32,
+    transaction: &Transaction,
+    allocated: &Vec<HashMap<RuneId, Lot>>,
+  ) -> Result<usize, diesel::result::Error> {
+    let network = self.chain.network();
+    let mut outpoint_balances = vec![];
+    let txid = transaction.txid();
+    for (vout, balanaces) in allocated.iter().enumerate() {
+      if balanaces.is_empty() {
+        continue;
+      }
+      if let Some(tx_out) = transaction.output.get(vout) {
+        let address = Address::from_script(&tx_out.script_pubkey, network.clone()).ok();
+        let address = address.map(|addr| addr.to_string());
+        let address = address.map(|addr| addr.to_string()).unwrap_or_default();
+        for (rune_id, lot) in balanaces {
+          let outpoint_balance = NewOutpointRuneBalance {
+            block_height,
+            tx_index: tx_index as i32,
+            txout_id: format!("{}:{}", &txid, vout),
+            tx_hash: txid.to_string(),
+            vout: vout as i64,
+            rune_id: rune_id.to_string(),
+            address: address.clone(),
+            balance_value: BigDecimal::from(lot.0),
+          };
+          outpoint_balances.push(outpoint_balance);
+        }
+      }
+    }
+    let index_block = match self.get_block_cache(block_height as u64) {
+      Some(cache) => cache,
+      None => {
+        let new_index_block = Arc::new(IndexBlock::new(block_height as u64));
+        self.add_index_block(Arc::clone(&new_index_block));
+        new_index_block
+      }
+    };
+    if allocated.len() > 0 {
+      let tx_rune = NewTransactionRune {
+        block_height,
+        tx_index: tx_index as i32,
+        tx_hash: txid.to_string(),
+      };
+      index_block.add_tx_rune(tx_rune);
+    }
+    let len = outpoint_balances.len();
     index_block.append_outpoint_rune_balances(&mut outpoint_balances);
     Ok(len)
   }
@@ -605,13 +696,14 @@ impl IndexExtension {
         handles.append(res);
       }
       if total_tx_ins.len() > 0 {
+        //move spent utxo to spent tx_output table
         if let Ok(ref mut res) =
-          table_outpoint_balance.spends(&total_tx_ins, self.connection_pool.clone())
+          table_outpoint_balance.spends(total_tx_ins.clone(), self.connection_pool.clone())
         {
           handles.append(res);
         }
         if let Ok(ref mut res) =
-          table_transaction_out.spends(&total_tx_ins, self.connection_pool.clone())
+          table_transaction_out.spends(total_tx_ins, self.connection_pool.clone())
         {
           handles.append(res);
         }

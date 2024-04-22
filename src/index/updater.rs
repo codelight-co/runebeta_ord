@@ -41,11 +41,7 @@ pub(crate) struct Updater<'index> {
 }
 
 impl<'index> Updater<'index> {
-  pub(crate) fn update_index(
-    &mut self,
-    mut wtx: WriteTransaction,
-    extension: Arc<IndexExtension>,
-  ) -> Result {
+  pub(crate) fn update_index(&mut self, mut wtx: WriteTransaction) -> Result {
     let start = Instant::now();
     let starting_height = u32::try_from(self.index.client.get_block_count()?).unwrap() + 1;
     let starting_index_height = self.height;
@@ -88,7 +84,7 @@ impl<'index> Updater<'index> {
       self.index.first_inscription_height,
       setting_index_inscriptions
     );
-    let lastest_block_height = extension.get_latest_block_height();
+    let lastest_block_height = self.index.extension.get_latest_block_height();
     while let Ok(block) = rx.recv() {
       //To create backup db set environment ORD_LAST_BLOCK_HEIGHT
       let current_height = self.height.clone();
@@ -96,12 +92,13 @@ impl<'index> Updater<'index> {
         break;
       }
       if current_height >= fist_inscription_height.clone() && setting_index_inscriptions {
-        let clone_extension = Arc::clone(&extension);
+        let clone_extension = Arc::clone(&self.index.extension);
         let block_header = block.header.clone();
-        let block_data = block.txdata.clone();
+        let mut block_data = block.txdata.clone();
         thread::spawn(move || {
           //Better do extension index before ordinal index, inside ordinal indexing, the block_height is increasing to 1
-          let _res = clone_extension.index_block(current_height as i64, &block_header, &block_data);
+          let _res =
+            clone_extension.index_block(current_height as i64, block_header, &mut block_data);
         });
       }
 
@@ -109,7 +106,7 @@ impl<'index> Updater<'index> {
         &mut outpoint_sender,
         &mut value_receiver,
         &mut wtx,
-        Arc::clone(&extension),
+        Arc::clone(&self.index.extension),
         block,
         &mut value_cache,
       )?;
@@ -128,7 +125,7 @@ impl<'index> Updater<'index> {
       uncommitted += 1;
 
       if uncommitted == self.index.settings.commit_interval() {
-        self.commit(wtx, extension.clone(), value_cache)?;
+        self.commit(wtx, value_cache)?;
         value_cache = HashMap::new();
         uncommitted = 0;
         wtx = self.index.begin_write()?;
@@ -167,7 +164,7 @@ impl<'index> Updater<'index> {
     }
 
     if uncommitted > 0 {
-      self.commit(wtx, extension.clone(), value_cache)?;
+      self.commit(wtx, value_cache)?;
     }
 
     if let Some(progress_bar) = &mut progress_bar {
@@ -397,7 +394,6 @@ impl<'index> Updater<'index> {
         }
       }
     }
-
     let mut content_type_to_count = wtx.open_table(CONTENT_TYPE_TO_COUNT)?;
     let mut height_to_block_header = wtx.open_table(HEIGHT_TO_BLOCK_HEADER)?;
     let mut height_to_last_sequence_number = wtx.open_table(HEIGHT_TO_LAST_SEQUENCE_NUMBER)?;
@@ -441,6 +437,52 @@ impl<'index> Updater<'index> {
       .transpose()?
       .map(|(number, _id)| number.value() + 1)
       .unwrap_or(0);
+
+    /*
+     * 2024 Apr 22
+     * Supersats: Index runes before inscriptions
+     */
+    if self.index.index_runes && self.height >= self.index.settings.first_rune_height() {
+      let mut outpoint_to_rune_balances = wtx.open_table(OUTPOINT_TO_RUNE_BALANCES)?;
+      let mut rune_id_to_rune_entry = wtx.open_table(RUNE_ID_TO_RUNE_ENTRY)?;
+      let mut rune_to_rune_id = wtx.open_table(RUNE_TO_RUNE_ID)?;
+      let mut sequence_number_to_rune_id = wtx.open_table(SEQUENCE_NUMBER_TO_RUNE_ID)?;
+      let mut transaction_id_to_rune = wtx.open_table(TRANSACTION_ID_TO_RUNE)?;
+
+      let runes = statistic_to_count
+        .get(&Statistic::Runes.into())?
+        .map(|x| x.value())
+        .unwrap_or(0);
+
+      let mut rune_updater = RuneUpdater {
+        event_sender: self.index.event_sender.as_ref(),
+        block_time: block.header.time,
+        burned: HashMap::new(),
+        client: &self.index.client,
+        height: self.height,
+        id_to_entry: &mut rune_id_to_rune_entry,
+        inscription_id_to_sequence_number: &mut inscription_id_to_sequence_number,
+        minimum: Rune::minimum_at_height(
+          self.index.settings.chain().network(),
+          Height(self.height),
+        ),
+        outpoint_to_balances: &mut outpoint_to_rune_balances,
+        rune_to_id: &mut rune_to_rune_id,
+        runes,
+        sequence_number_to_rune_id: &mut sequence_number_to_rune_id,
+        statistic_to_count: &mut statistic_to_count,
+        transaction_id_to_rune: &mut transaction_id_to_rune,
+        extension, // Add externsion here
+      };
+      for (i, (tx, txid)) in block.txdata.iter().enumerate() {
+        rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid)?;
+      }
+      rune_updater.update()?;
+      log::info!(
+        "Runes indexed in {} ms",
+        (Instant::now() - start).as_millis()
+      );
+    }
 
     let home_inscription_count = home_inscriptions.len()?;
 
@@ -572,6 +614,7 @@ impl<'index> Updater<'index> {
         outpoint_to_sat_ranges.insert(&OutPoint::null().store(), lost_sat_ranges.as_slice())?;
       }
     } else if index_inscriptions {
+      //Supersats nots: this function take much time ~4s
       for (tx, txid) in block.txdata.iter().skip(1).chain(block.txdata.first()) {
         inscription_updater.index_inscriptions(tx, *txid, None)?;
       }
@@ -605,7 +648,8 @@ impl<'index> Updater<'index> {
       &Statistic::UnboundInscriptions.key(),
       &inscription_updater.unbound_inscriptions,
     )?;
-
+    //Supersats: Try index runes before inscription for better performance
+    /*
     if self.index.index_runes && self.height >= self.index.settings.first_rune_height() {
       let mut outpoint_to_rune_balances = wtx.open_table(OUTPOINT_TO_RUNE_BALANCES)?;
       let mut rune_id_to_rune_entry = wtx.open_table(RUNE_ID_TO_RUNE_ENTRY)?;
@@ -638,13 +682,16 @@ impl<'index> Updater<'index> {
         transaction_id_to_rune: &mut transaction_id_to_rune,
         extension, // Add externsion here
       };
-
+      log::info!(
+        "Start index runes from {} ms after begining",
+        (Instant::now() - start).as_millis()
+      );
       for (i, (tx, txid)) in block.txdata.iter().enumerate() {
         rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid)?;
       }
       rune_updater.update()?;
     }
-
+    */
     height_to_block_header.insert(&self.height, &block.header.store())?;
 
     self.height += 1;
@@ -724,12 +771,7 @@ impl<'index> Updater<'index> {
     Ok(())
   }
 
-  fn commit(
-    &mut self,
-    wtx: WriteTransaction,
-    extension: Arc<IndexExtension>,
-    value_cache: HashMap<OutPoint, u64>,
-  ) -> Result {
+  fn commit(&mut self, wtx: WriteTransaction, value_cache: HashMap<OutPoint, u64>) -> Result {
     log::info!(
       "Committing block height {}, {} outputs traversed, {} in map, {} cached",
       self.height - 1,
@@ -737,7 +779,7 @@ impl<'index> Updater<'index> {
       self.range_cache.len(),
       self.outputs_cached
     );
-
+    let start = Instant::now();
     if self.index.index_sats {
       log::info!(
         "Flushing {} entries ({:.1}% resulting from {} insertions) from memory to database",
@@ -768,19 +810,35 @@ impl<'index> Updater<'index> {
     Index::increment_statistic(&wtx, Statistic::SatRanges, self.sat_ranges_since_flush)?;
     self.sat_ranges_since_flush = 0;
     Index::increment_statistic(&wtx, Statistic::Commits, 1)?;
-    let commit_res = extension.commit().map_err(|err| {
-      log::error!("Extension commit err {:?}", &err);
-    });
+    let ext_commit_start = Instant::now();
+    let mut commit_handles = None;
+    if let Ok(handles) = self.index.extension.commit().map_err(|err| {
+      log::error!("ThreadCreate commit err {:?}", &err);
+    }) {
+      log::info!(
+        "Extension create {} commit threads in {} ms",
+        handles.len(),
+        (Instant::now() - ext_commit_start).as_millis(),
+      );
+      commit_handles.replace(handles);
+    };
 
     //Log result
     wtx.commit()?;
+    log::info!(
+      "Ordinal commit finished in {} ms",
+      (Instant::now() - start).as_millis(),
+    );
     Reorg::update_savepoints(self.index, self.height)?;
     //Wait until all sub threads are finished
-    if let Ok(handles) = commit_res {
+    if let Some(handles) = commit_handles {
       handles.into_iter().for_each(|hanlde| {
         let _ = hanlde.join();
       });
-      extension.log_finish_indexing((self.height - 1) as i64);
+      self
+        .index
+        .extension
+        .log_finish_indexing((self.height - 1) as i64);
     }
     Ok(())
   }

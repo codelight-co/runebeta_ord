@@ -20,8 +20,43 @@ diesel::table! {
         vout -> Int8,
         rune_id -> Varchar,
         address -> Varchar,
-        spent -> Bool,
         balance_value -> Numeric,
+    }
+}
+
+diesel::table! {
+    spent_outpoint_rune_balances (id) {
+        id -> Int8,
+        block_height -> Int8,
+        tx_index -> Int4,
+        txout_id -> Varchar,
+        tx_hash -> Varchar,
+        vout -> Int8,
+        rune_id -> Varchar,
+        address -> Varchar,
+        balance_value -> Numeric,
+    }
+}
+
+diesel::table! {
+    spent_transaction_outs (id) {
+        id -> Int8,
+        block_height -> Int8,
+        tx_index -> Int4,
+        txout_id -> Varchar,
+        tx_hash -> Varchar,
+        vout -> Numeric,
+        value -> Numeric,
+        asm -> Varchar,
+        dust_value -> Numeric,
+        address -> Nullable<Varchar>,
+        script_pubkey -> Text,
+        runestone -> Varchar,
+        cenotaph -> Varchar,
+        edicts -> Int8,
+        mint -> Bool,
+        etching -> Bool,
+        burn -> Bool,
     }
 }
 
@@ -53,7 +88,6 @@ diesel::table! {
         dust_value -> Numeric,
         address -> Nullable<Varchar>,
         script_pubkey -> Text,
-        spent -> Bool,
         runestone -> Varchar,
         cenotaph -> Varchar,
         edicts -> Int8,
@@ -106,9 +140,7 @@ diesel::table! {
         block_height -> Int8,
         tx_index -> Int4,
         tx_hash -> Varchar,
-        rune_id -> Varchar,
         address -> Varchar,
-        spent -> Bool,
     }
 }
 
@@ -118,13 +150,14 @@ diesel::table! {
         block_height -> Int8,
         tx_index -> Int4,
         tx_hash -> Varchar,
-        rune_id -> Varchar,
     }
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
     blocks,
     outpoint_rune_balances,
+    spent_outpoint_rune_balances,
+    spent_transaction_outs,
     transaction_ins,
     transaction_outs,
     transaction_rune_entries,

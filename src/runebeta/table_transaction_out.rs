@@ -5,18 +5,21 @@ use std::{
 };
 
 use super::models::NewTransactionOut;
-use crate::{schema::transaction_outs::dsl::*, split_input, InsertRecords, CONNECTION_POOL_SIZE};
-use bitcoin::Txid;
+use crate::{
+  create_query_move_spent_transaction_outs, schema::transaction_outs::dsl::*, split_input,
+  InsertRecords,
+};
+
 use diesel::{
   associations::HasTable,
   r2d2::{ConnectionManager, Pool},
-  ExpressionMethods, PgConnection, RunQueryDsl,
+  PgConnection, RunQueryDsl,
 };
 pub const NUMBER_OF_FIELDS: u16 = 18;
 #[derive(Clone)]
 pub struct TransactionOutTable {}
 
-impl<'conn> TransactionOutTable {
+impl TransactionOutTable {
   pub fn new() -> Self {
     Self {}
   }
@@ -30,20 +33,14 @@ impl<'conn> TransactionOutTable {
       .on_conflict_do_nothing()
       .execute(connection)
   }
-  //Run in the same transaction as txin indexing
   pub fn spends(
     &self,
-    txins: &Vec<(Txid, i64)>,
+    txins: Vec<String>,
     conn_pool: Pool<ConnectionManager<PgConnection>>,
   ) -> Result<Vec<JoinHandle<()>>, diesel::result::Error> {
     let mut handles = vec![];
-    let txout_ids = txins
-      .iter()
-      .map(|(txid, ind)| format!("{}:{}", txid.to_string(), ind))
-      .collect::<Vec<String>>();
-    //Split update into small query for improve performance
-    let chunk_size = cmp::min(u16::MAX as usize, txout_ids.len() / CONNECTION_POOL_SIZE);
-    let chunks = split_input(txout_ids, chunk_size);
+    let chunk_size = cmp::min(u16::MAX as usize, txins.len());
+    let chunks = split_input(txins, chunk_size);
 
     for chunk in chunks {
       let pool = conn_pool.clone();
@@ -54,21 +51,25 @@ impl<'conn> TransactionOutTable {
         loop {
           if let Ok(mut connection) = pool.get() {
             let start = Instant::now();
-            let res = diesel::update(transaction_outs)
-              .filter(txout_id.eq_any(&thread_chunk))
-              .set(spent.eq(true))
-              .execute(&mut connection);
+            let query = create_query_move_spent_transaction_outs(&thread_chunk);
+            let res = query.execute(&mut connection);
+
+            // let res = diesel::update(transaction_outs)
+            //   .filter(txout_id.eq_any(&thread_chunk))
+            //   .set(spent.eq(true))
+            //   .execute(&mut connection);
+
             match res {
               Ok(size) => {
                 log::info!(
-                  "Updated {} records into the table {} in {} ms",
+                  "Move out {} records from the table {} in {} ms",
                   size,
                   Self::TABLE_NAME,
                   start.elapsed().as_millis()
                 );
               }
               Err(err) => {
-                log::info!("Updated error {:?}", &err);
+                log::info!("Execute error {:?}", &err);
               }
             }
             break;
@@ -76,10 +77,6 @@ impl<'conn> TransactionOutTable {
         }
       });
       handles.push(handle);
-      // diesel::update(transaction_outs)
-      //   .filter(txout_id.eq_any(chunk))
-      //   .set(spent.eq(true))
-      //   .execute(connection)?;
     }
     Ok(handles)
   }

@@ -1,5 +1,3 @@
-use bigdecimal::BigDecimal;
-
 use super::*;
 
 pub(super) struct RuneUpdater<'a, 'tx, 'client> {
@@ -174,6 +172,11 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
 
     // update outpoint balances
     let mut buffer: Vec<u8> = Vec::new();
+    let _res =
+      self
+        .extension
+        .index_outpoint_balances_v2(self.height as i64, tx_index, tx, &allocated);
+
     for (vout, balances) in allocated.into_iter().enumerate() {
       if balances.is_empty() {
         continue;
@@ -193,17 +196,16 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
 
       // Sort balances by id so tests can assert balances in a fixed order
       balances.sort();
-      let _res = self.extension.index_outpoint_balances(
-        self.height as i64,
-        tx_index,
-        tx,
-        vout,
-        &balances
-          .iter()
-          .map(|(rune_id, balance)| (rune_id.clone(), BigDecimal::from(balance.0)))
-          .collect(),
-      );
-
+      // let _res = self.extension.index_outpoint_balances(
+      //   self.height as i64,
+      //   tx_index,
+      //   tx,
+      //   vout,
+      //   &balances
+      //     .iter()
+      //     .map(|(rune_id, balance)| (rune_id.clone(), BigDecimal::from(balance.0)))
+      //     .collect(),
+      // );
       let outpoint = OutPoint {
         txid,
         vout: vout.try_into().unwrap(),
