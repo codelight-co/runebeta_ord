@@ -158,6 +158,9 @@ pub trait InsertRecords {
 //Calculate chunk size when device input vector
 pub fn calculate_chunk_size(input_len: usize, max_size: usize) -> usize {
   //if input size is relative smalll small- we hardcode a threshold here
+  if input_len == 0 {
+    return input_len;
+  }
   let mut required_chunks = input_len / max_size;
   if required_chunks * max_size < input_len {
     required_chunks = required_chunks + 1;
