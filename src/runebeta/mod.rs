@@ -105,6 +105,9 @@ pub trait InsertRecords {
     records: Vec<Self::Record>,
     conn_pool: Pool<ConnectionManager<PgConnection>>,
   ) -> Result<Vec<JoinHandle<()>>, diesel::result::Error> {
+    if records.len() == 0 {
+      return Ok(Default::default());
+    }
     //let chunks = records.chunks(Self::CHUNK_SIZE);
     //1. Adjust chunk_size for split vector into chunk with equals length
     let chunk_size = calculate_chunk_size(records.len(), Self::CHUNK_SIZE);
