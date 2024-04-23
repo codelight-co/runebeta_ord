@@ -30,7 +30,7 @@ use std::{
   fmt::Write,
   sync::{Arc, Mutex, RwLock},
   thread::JoinHandle,
-  time::{Instant, SystemTime, UNIX_EPOCH},
+  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use std::{env, thread, time};
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
@@ -120,13 +120,14 @@ impl IndexBlock {
       log::info!("Cannot lock the raw_tx_ins for insert item");
     }
   }
-  fn add_rune_mint(&self, block_height: i64, rune_id: &RuneId) {
+  fn add_rune_mint(&self, block_height: i64, rune_id: &RuneId, amount: &Lot) {
     if let Ok(ref mut rune_stats) = self.rune_stats.try_lock() {
       let rune_stat = rune_stats
         .entry(rune_id.clone())
         .or_insert_with(|| NewRuneStats {
           block_height,
           rune_id: rune_id.to_string(),
+          mint_amount: BigDecimal::from(&amount.0),
           ..Default::default()
         });
       rune_stat.mints = rune_stat.mints + 1
@@ -158,7 +159,6 @@ pub struct IndexExtension {
   //Todo: index "Rune transaction" only - Must deeply understand which txs are related with some runes
   _index_all_transaction: bool,
   last_block_height: u32,
-  indexed_block_height: Mutex<Option<u32>>,
   connection_pool: Pool<ConnectionManager<PgConnection>>,
   index_cache: RwLock<VecDeque<Arc<IndexBlock>>>,
   //Store indexer start time
@@ -206,7 +206,6 @@ impl IndexExtension {
     Self {
       chain,
       last_block_height,
-      indexed_block_height: Mutex::new(None),
       _index_all_transaction: index_all_transaction == "1",
       connection_pool: connection_pool.expect("Connection pool must successfull created"),
       index_cache: Default::default(),
@@ -216,12 +215,13 @@ impl IndexExtension {
   pub fn get_latest_block_height(&self) -> u32 {
     self.last_block_height
   }
-  pub fn get_indexed_block(&self) -> Option<u32> {
-    self
-      .indexed_block_height
-      .lock()
-      .ok()
-      .and_then(|height| (*height).clone())
+  pub fn get_indexed_block(&self) -> Option<i64> {
+    //Load all rune_entry for update minable
+    if let Ok(mut conn) = self.connection_pool.get() {
+      BlockTable::new().get_last_indexed_block(&mut conn).ok()
+    } else {
+      None
+    }
   }
   pub fn get_block_cache(&self, height: u64) -> Option<Arc<IndexBlock>> {
     if let Ok(cache) = self.index_cache.read() {
@@ -251,27 +251,60 @@ impl IndexExtension {
     let mut index_log = self.index_log.write().unwrap();
     index_log.insert(height.clone(), current.as_millis());
   }
-  pub fn log_finish_indexing(&self, height: i64) {
+  pub fn finish_indexing(&self, heights: Vec<i64>) {
     let current = SystemTime::now()
       .duration_since(UNIX_EPOCH)
       .expect("Time went backwards")
       .as_millis();
-    let start = self
-      .index_log
-      .read()
-      .unwrap()
-      .get(&height)
-      .map(|v| v.clone())
-      .unwrap_or_default();
-    log::info!(
-      "[Benchmark]#{}|{}|{}|{}",
-      &height,
-      start,
-      current,
-      current - start
-    );
-    if let Ok(mut block_height) = self.indexed_block_height.lock() {
-      block_height.replace(height as u32);
+    if heights.len() > 0 {
+      //Update table blocks for update index_end value
+      loop {
+        if let Ok(mut conn) = self.connection_pool.get() {
+          let _ = BlockTable::new().update_finish_timestamp(&heights, &current, &mut conn);
+          break;
+        }
+        thread::sleep(Duration::from_millis(100))
+      }
+    }
+    //Write log
+    if heights.len() == 1 {
+      let height = heights.get(0).unwrap();
+      let start = self
+        .index_log
+        .read()
+        .unwrap()
+        .get(&height)
+        .map(|v| v.clone())
+        .unwrap_or_default();
+      //Write blocks to db
+
+      log::info!(
+        "[Benchmark]#{}|{}|{}|{}",
+        &height,
+        start,
+        current,
+        current - start
+      );
+    } else if heights.len() > 1 {
+      let first = heights.first().unwrap();
+      let last = heights.last().unwrap();
+      let start = self
+        .index_log
+        .read()
+        .unwrap()
+        .get(first)
+        .map(|v| v.clone())
+        .unwrap_or_default();
+
+      log::info!(
+        "[Benchmark]#{} blocks|{}-{}|{}|{}|{}",
+        last - first + 1,
+        last,
+        first,
+        start,
+        current,
+        current - start
+      );
     }
   }
   /*
@@ -284,12 +317,17 @@ impl IndexExtension {
     block_data: &mut Vec<(Transaction, Txid)>,
   ) -> Result<(), diesel::result::Error> {
     self.log_start_indexing(height);
+    let current = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .expect("Time went backwards");
     let start = Instant::now();
     let new_block = NewBlock {
       block_time: block_header.time as i64,
       block_height: height,
       previous_hash: block_header.prev_blockhash.to_string(),
       block_hash: block_header.block_hash().to_string(),
+      index_start: BigDecimal::from(current.as_millis()),
+      index_end: BigDecimal::from(0),
     };
     let mut transactions = vec![];
     let mut transaction_outs = vec![];
@@ -474,7 +512,7 @@ impl IndexExtension {
     index_block.add_rune_entry(tx_rune_entry);
     Ok(())
   }
-  pub fn index_rune_mint(&self, height: u32, rune_id: &RuneId) -> anyhow::Result<()> {
+  pub fn index_rune_mint(&self, height: u32, rune_id: &RuneId, amount: &Lot) -> anyhow::Result<()> {
     let index_block = match self.get_block_cache(height as u64) {
       Some(cache) => cache,
       None => {
@@ -483,7 +521,7 @@ impl IndexExtension {
         new_index_block
       }
     };
-    index_block.add_rune_mint(height as i64, rune_id);
+    index_block.add_rune_mint(height as i64, rune_id, amount);
     Ok(())
   }
   pub fn index_rune_burned(
@@ -606,8 +644,13 @@ impl IndexExtension {
     index_block.append_outpoint_rune_balances(&mut outpoint_balances);
     Ok(len)
   }
-  pub fn commit(&self) -> anyhow::Result<Vec<JoinHandle<()>>> {
+  /*
+   * Return vector handle thread for waiting for result of all thread before move forward to next iteration
+   * Vector of blocks for update commited time
+   */
+  pub fn commit(&self) -> anyhow::Result<(Vec<JoinHandle<()>>, Vec<i64>)> {
     let mut handles = vec![];
+    let mut block_heights = None;
     let mut processing_cache = vec![];
     if let Ok(mut cache) = self.index_cache.write() {
       while let Some(index_block) = cache.pop_front() {
@@ -691,8 +734,13 @@ impl IndexExtension {
           total_rune_stats.push((block_height, stats));
         }
       }
+      let heights = total_blocks
+        .iter()
+        .map(|block| block.block_height.clone())
+        .collect::<Vec<i64>>();
       if let Ok(ref mut res) = table_block.insert_vector(total_blocks, self.connection_pool.clone())
       {
+        block_heights.replace(heights);
         handles.append(res);
       }
       if let Ok(ref mut res) =
@@ -748,6 +796,6 @@ impl IndexExtension {
         }
       }
     }
-    Ok(handles)
+    Ok((handles, block_heights.unwrap_or_default()))
   }
 }

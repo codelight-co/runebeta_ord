@@ -812,7 +812,8 @@ impl<'index> Updater<'index> {
     Index::increment_statistic(&wtx, Statistic::Commits, 1)?;
     let ext_commit_start = Instant::now();
     let mut commit_handles = None;
-    if let Ok(handles) = self.index.extension.commit().map_err(|err| {
+    let mut blocks = None;
+    if let Ok((handles, heights)) = self.index.extension.commit().map_err(|err| {
       log::error!("ThreadCreate commit err {:?}", &err);
     }) {
       log::info!(
@@ -821,6 +822,7 @@ impl<'index> Updater<'index> {
         (Instant::now() - ext_commit_start).as_millis(),
       );
       commit_handles.replace(handles);
+      blocks.replace(heights);
     };
 
     //Log result
@@ -838,7 +840,7 @@ impl<'index> Updater<'index> {
       self
         .index
         .extension
-        .log_finish_indexing((self.height - 1) as i64);
+        .finish_indexing(blocks.unwrap_or_default());
     }
     Ok(())
   }

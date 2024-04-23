@@ -1,6 +1,6 @@
 use diesel::{
   associations::HasTable, ExpressionMethods, OptionalExtension, PgConnection, QueryDsl,
-  RunQueryDsl, SelectableHelper,
+  QueryResult, RunQueryDsl, SelectableHelper,
 };
 
 use super::{
@@ -8,7 +8,7 @@ use super::{
   InsertRecords,
 };
 use crate::schema::blocks::dsl::*;
-pub const NUMBER_OF_FIELDS: u16 = 5;
+pub const NUMBER_OF_FIELDS: u16 = 7;
 #[derive(Clone)]
 pub struct BlockTable {}
 
@@ -16,16 +16,34 @@ impl<'conn> BlockTable {
   pub fn new() -> Self {
     Self {}
   }
-  pub fn get_latest_block_height(
+  pub fn get_last_indexed_block(
     &self,
     connection: &mut PgConnection,
   ) -> Result<i64, diesel::result::Error> {
     let block = blocks
       .select(Block::as_select())
-      .order_by(block_height.desc())
+      .order_by(index_end.desc())
       .first(connection)
       .optional()?; // This allows for returning an Option<Post>, otherwise it will throw an error
     Ok(block.map(|res| res.block_height).unwrap_or_default())
+  }
+
+  pub fn update_finish_timestamp(
+    &self,
+    heights: &Vec<i64>,
+    timestamp: &u128,
+    conn: &mut PgConnection,
+  ) -> QueryResult<usize> {
+    let query = format!(
+      r#"UPDATE blocks SET index_end = {} WHERE block_height in ({});"#,
+      timestamp,
+      heights
+        .iter()
+        .map(|h| h.to_string())
+        .collect::<Vec<String>>()
+        .join(",")
+    );
+    diesel::sql_query(query).execute(conn)
   }
   pub fn insert(
     &self,

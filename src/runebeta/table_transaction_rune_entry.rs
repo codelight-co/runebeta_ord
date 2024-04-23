@@ -1,13 +1,29 @@
 use bigdecimal::BigDecimal;
+use diesel::query_builder::SqlQuery;
 use diesel::{associations::HasTable, PgConnection, RunQueryDsl};
 
 use crate::schema::transaction_rune_entries::dsl::*;
 use crate::{InsertRecords, RuneEntry, RuneId};
 
 use super::models::{NewTxRuneEntry, RuneTerms};
-pub const NUMBER_OF_FIELDS: u16 = 20;
+pub const NUMBER_OF_FIELDS: u16 = 28;
 pub const RUNE_MINT_TYPE_FIXED_CAP: &str = "fixed-cap";
 pub const RUNE_MINT_TYPE_FAIRMINT: &str = "fairmint";
+
+pub fn create_update_rune_mintable(height: &u64) -> SqlQuery {
+  let query = format!(
+    r#"UPDATE transaction_rune_entries 
+        SET mintable = COALESCE (offset_start , -block_height) + block_height <= {0} 
+      				AND COALESCE (height_start, 0) <= {0}
+      	AND COALESCE (offset_end , {0} - block_height) + block_height >= {0}  
+      	AND COALESCE(height_end, {0} ) >= {0} 
+      	AND cap > mints
+    WHERE terms IS NOT NULL;"#,
+    height
+  );
+  diesel::sql_query(query)
+}
+
 #[derive(Clone)]
 pub struct TransactionRuneEntryTable {}
 
@@ -41,7 +57,7 @@ impl From<&RuneEntry> for NewTxRuneEntry {
         rune_terms
           .cap
           .as_ref()
-          .map(|cap| BigDecimal::from(cap - rune_entry.mints))
+          .map(|v| BigDecimal::from(v - rune_entry.mints))
       })
       .unwrap_or_else(|| BigDecimal::from(0));
     NewTxRuneEntry {
@@ -59,16 +75,32 @@ impl From<&RuneEntry> for NewTxRuneEntry {
         |_| String::from(RUNE_MINT_TYPE_FAIRMINT),
       ),
       mints: rune_entry.mints as i64,
-      number: rune_entry.block as i64,
+      number: rune_entry.number as i64,
       rune: BigDecimal::from(rune_entry.spaced_rune.rune.0),
       spacers: rune_entry.spaced_rune.spacers as i32,
-      premine: rune_entry.premine as i64,
+      premine: BigDecimal::from(rune_entry.premine),
       remaining: mint_remain,
       spaced_rune: rune_entry.spaced_rune.to_string(),
-      supply: BigDecimal::from(0_u128),
+      supply: BigDecimal::from(rune_entry.premine),
       symbol: rune_entry.symbol.map(|c| c.to_string()),
       timestamp: rune_entry.timestamp as i32,
       terms: rune_entry.terms.map(|entry| RuneTerms::from(&entry)),
+      height_start: rune_entry
+        .terms
+        .and_then(|entry| entry.height.0.as_ref().map(|v| v.clone() as i64)),
+      height_end: rune_entry
+        .terms
+        .and_then(|entry| entry.height.1.as_ref().map(|v| v.clone() as i64)),
+      offset_start: rune_entry
+        .terms
+        .and_then(|entry| entry.offset.0.as_ref().map(|v| v.clone() as i64)),
+      offset_end: rune_entry
+        .terms
+        .and_then(|entry| entry.offset.1.as_ref().map(|v| v.clone() as i64)),
+      cap: rune_entry
+        .terms
+        .and_then(|entry| entry.cap.as_ref().map(|v| BigDecimal::from(v)))
+        .unwrap_or_default(),
       turbo: rune_entry.turbo,
     }
   }

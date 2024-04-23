@@ -29,7 +29,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
     if let Some(artifact) = &artifact {
       if let Some(id) = artifact.mint() {
         if let Some(amount) = self.mint(id)? {
-          self.extension.index_rune_mint(self.height, &id)?;
+          self.extension.index_rune_mint(self.height, &id, &amount)?;
           *unallocated.entry(id).or_default() += amount;
 
           if let Some(sender) = self.event_sender {

@@ -6,8 +6,8 @@ CREATE TABLE public.rune_stats (
 	block_height BIGINT NOT NULL,
 	rune_id varchar NOT NULL,
 	mints int8 NOT NULL DEFAULT 0,
+	mint_amount numeric NOT NULL DEFAULT 0,
 	burned numeric NOT NULL DEFAULT 0,
-	mintable bool NOT NULL DEFAULT false,
 	remaining numeric NOT NULL DEFAULT 0,
 	aggregated bool NOT NULL DEFAULT false
 );

@@ -4,7 +4,9 @@ CREATE TABLE blocks (
   previous_hash VARCHAR NOT NULL,
   block_hash VARCHAR NOT NULL,
   block_height BIGINT NOT NULL UNIQUE,
-  block_time BIGINT NOT NULL
+  block_time BIGINT NOT NULL,
+  index_start NUMERIC NOT NULL,
+  index_end NUMERIC NOT NULL
 );
 
 CREATE TABLE transactions (
@@ -60,7 +62,6 @@ CREATE TABLE transaction_rune_entries (
   tx_index INTEGER NOT NULL DEFAULT 0,
   tx_hash VARCHAR NOT NULL,
   rune_id VARCHAR NOT NULL,
-
   burned NUMERIC(40) NOT NULL,
   divisibility SMALLINT NOT NULL,
   -- txid
@@ -72,11 +73,15 @@ CREATE TABLE transaction_rune_entries (
   mints BIGINT NOT NULL,
   -- zero based index of rune
   number BIGINT NOT NULL,
-  -- Mint entry
   terms jsonb NULL,
+  height_start BIGINT NULL,
+  height_end BIGINT NULL,
+  offset_start BIGINT NULL,
+  offset_end BIGINT NULL,
+  cap NUMERIC NOT NULL DEFAULT 0,
   rune NUMERIC(40) NOT NULL,
   spacers INTEGER NOT NULL,
-  premine BIGINT NOT NULL DEFAULT 0,
+  premine NUMERIC NOT NULL DEFAULT 0,
   remaining NUMERIC NOT NULL DEFAULT 0,
   spaced_rune VARCHAR NOT NULL DEFAULT '',
   supply NUMERIC(40) NOT NULL,

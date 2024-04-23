@@ -7,6 +7,8 @@ diesel::table! {
         block_hash -> Varchar,
         block_height -> Int8,
         block_time -> Int8,
+        index_start -> Numeric,
+        index_end -> Numeric,
     }
 }
 
@@ -30,8 +32,8 @@ diesel::table! {
         block_height -> Int8,
         rune_id -> Varchar,
         mints -> Int8,
+        mint_amount -> Numeric,
         burned -> Numeric,
-        mintable -> Bool,
         remaining -> Numeric,
         aggregated -> Bool,
     }
@@ -126,9 +128,14 @@ diesel::table! {
         mints -> Int8,
         number -> Int8,
         terms -> Nullable<Jsonb>,
+        height_start -> Nullable<Int8>,
+        height_end -> Nullable<Int8>,
+        offset_start -> Nullable<Int8>,
+        offset_end -> Nullable<Int8>,
+        cap -> Numeric,
         rune -> Numeric,
         spacers -> Int4,
-        premine -> Int8,
+        premine -> Numeric,
         remaining -> Numeric,
         spaced_rune -> Varchar,
         supply -> Numeric,

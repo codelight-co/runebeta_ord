@@ -10,18 +10,20 @@ use crate::schema::rune_stats::dsl::*;
 use crate::{calculate_chunk_size, split_input, InsertRecords};
 
 use super::models::NewRuneStats;
-pub const NUMBER_OF_FIELDS: u16 = 6;
+use super::table_transaction_rune_entry::create_update_rune_mintable;
+pub const NUMBER_OF_FIELDS: u16 = 8;
 
 pub fn create_update_rune_entry(height: &u64) -> SqlQuery {
   let query = format!(
     r#"
       UPDATE transaction_rune_entries e SET 
         mints = e.mints + s.mints, 
-        burned = e.burned + s.burned, 
-        mintable = s.mintable,
+        supply = e.supply + s.mint_amount,
+        burned = e.burned + s.burned,  
         remaining = e.remaining - s.mints
       FROM rune_stats s
-      WHERE s.block_height = {}
+      WHERE s.block_height = {} 
+      AND s.aggregated = false
       AND e.rune_id = s.rune_id;
       "#,
     height
@@ -108,7 +110,7 @@ impl RuneStatsTable {
             let stat_res = update_rune_stat.execute(conn);
             match &stat_res {
               Ok(_) => log::info!(
-                "Update rune stats for blocks {:?} in {} ms",
+                "Updated rune stats for blocks {:?} in {} ms",
                 heights,
                 start.elapsed().as_millis()
               ),
@@ -117,6 +119,23 @@ impl RuneStatsTable {
                 return stat_res;
               }
             };
+            //Update mintable by execute query with latest heights
+            if let Some(height) = heights.last() {
+              let update_rune_stat = create_update_rune_mintable(height);
+              let stat_res = update_rune_stat.execute(conn);
+              match &stat_res {
+                Ok(_) => log::info!(
+                  "Updated rune mintable for block {:?} in {} ms",
+                  heights,
+                  start.elapsed().as_millis()
+                ),
+                Err(err) => {
+                  log::info!("Update stats error {:?}", err);
+                  return stat_res;
+                }
+              };
+            }
+
             Ok(size)
           });
           break;
