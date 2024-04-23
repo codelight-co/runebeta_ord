@@ -120,22 +120,30 @@ impl IndexBlock {
       log::info!("Cannot lock the raw_tx_ins for insert item");
     }
   }
-  fn add_rune_mint(&self, rune_id: &RuneId) {
+  fn add_rune_mint(&self, block_height: i64, rune_id: &RuneId) {
     if let Ok(ref mut rune_stats) = self.rune_stats.try_lock() {
       let rune_stat = rune_stats
         .entry(rune_id.clone())
-        .or_insert_with(|| NewRuneStats::default());
+        .or_insert_with(|| NewRuneStats {
+          block_height,
+          rune_id: rune_id.to_string(),
+          ..Default::default()
+        });
       rune_stat.mints = rune_stat.mints + 1
     } else {
       log::info!("Cannot lock the raw_tx_ins for insert item");
     }
   }
-  fn add_rune_burned(&self, burned: &HashMap<RuneId, Lot>) {
+  fn add_rune_burned(&self, block_height: i64, burned: &HashMap<RuneId, Lot>) {
     if let Ok(ref mut rune_stats) = self.rune_stats.try_lock() {
       for (rune_id, amount) in burned {
         let rune_stat = rune_stats
           .entry(rune_id.clone())
-          .or_insert_with(|| NewRuneStats::default());
+          .or_insert_with(|| NewRuneStats {
+            block_height,
+            rune_id: rune_id.to_string(),
+            ..Default::default()
+          });
         rune_stat.burned = &rune_stat.burned + amount.0
       }
     } else {
@@ -475,7 +483,7 @@ impl IndexExtension {
         new_index_block
       }
     };
-    index_block.add_rune_mint(rune_id);
+    index_block.add_rune_mint(height as i64, rune_id);
     Ok(())
   }
   pub fn index_rune_burned(
@@ -491,7 +499,7 @@ impl IndexExtension {
         new_index_block
       }
     };
-    index_block.add_rune_burned(burned);
+    index_block.add_rune_burned(height as i64, burned);
     Ok(())
   }
   pub fn index_outpoint_balances(

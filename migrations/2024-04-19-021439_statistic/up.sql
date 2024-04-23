@@ -13,3 +13,4 @@ CREATE TABLE public.rune_stats (
 );
 
 CREATE INDEX rune_stats_rune_id ON public.rune_stats USING btree (rune_id);
+CREATE UNIQUE INDEX rune_stats_block_rune_id ON public.rune_stats USING btree (block_height, rune_id);

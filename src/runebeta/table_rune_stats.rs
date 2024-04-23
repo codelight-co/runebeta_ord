@@ -21,7 +21,7 @@ pub fn create_update_rune_entry(height: &u64) -> SqlQuery {
         mintable = s.mintable,
         remaining = e.remaining - s.mints
       FROM rune_stats s
-      WHERE rune_stats.block_height = {}
+      WHERE s.block_height = {}
       AND e.rune_id = s.rune_id;
       "#,
     height
