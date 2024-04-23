@@ -29,6 +29,7 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
     if let Some(artifact) = &artifact {
       if let Some(id) = artifact.mint() {
         if let Some(amount) = self.mint(id)? {
+          self.extension.index_rune_mint(self.height, &id)?;
           *unallocated.entry(id).or_default() += amount;
 
           if let Some(sender) = self.event_sender {
@@ -248,12 +249,14 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
   }
 
   pub(super) fn update(self) -> Result {
+    self
+      .extension
+      .index_rune_burned(self.height, &self.burned)?;
     for (rune_id, burned) in self.burned {
       let mut entry = RuneEntry::load(self.id_to_entry.get(&rune_id.store())?.unwrap().value());
       entry.burned = entry.burned.checked_add(burned.n()).unwrap();
       self.id_to_entry.insert(&rune_id.store(), entry.store())?;
     }
-
     Ok(())
   }
 

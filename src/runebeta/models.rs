@@ -26,22 +26,16 @@ use std::io::Write;
   PartialOrd,
 )]
 #[diesel(sql_type = Jsonb)]
-pub struct MintEntryType {
+pub struct RuneTerms {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub amount: Option<BigDecimal>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub cap: Option<BigDecimal>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub height1: Option<i64>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub height2: Option<i64>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub offset1: Option<i64>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub offset2: Option<i64>,
+  pub height: (Option<u64>, Option<u64>),
+  pub offset: (Option<u64>, Option<u64>),
 }
 
-impl ToSql<Jsonb, Pg> for MintEntryType {
+impl ToSql<Jsonb, Pg> for RuneTerms {
   fn to_sql(&self, out: &mut Output<Pg>) -> diesel::serialize::Result {
     let value = serde_json::to_value(self)?;
     // <serde_json::Value as ToSql<Jsonb, Pg>>::to_sql(&value, out)
@@ -51,7 +45,7 @@ impl ToSql<Jsonb, Pg> for MintEntryType {
       .map_err(Into::into)
   }
 }
-impl FromSql<Jsonb, Pg> for MintEntryType {
+impl FromSql<Jsonb, Pg> for RuneTerms {
   fn from_sql(
     bytes: <Pg as diesel::backend::Backend>::RawValue<'_>,
   ) -> diesel::deserialize::Result<Self> {
@@ -60,17 +54,13 @@ impl FromSql<Jsonb, Pg> for MintEntryType {
   }
 }
 
-impl From<&Terms> for MintEntryType {
+impl From<&Terms> for RuneTerms {
   fn from(value: &Terms) -> Self {
-    let (height1, height2) = value.height.clone();
-    let (offset1, offset2) = value.offset.clone();
-    MintEntryType {
+    RuneTerms {
       amount: value.amount.map(|v| BigDecimal::from(v)),
       cap: value.cap.map(|v| BigDecimal::from(v)),
-      height1: height1.map(|v| v as i64),
-      height2: height2.map(|v| v as i64),
-      offset1: offset1.map(|v| v as i64),
-      offset2: offset2.map(|v| v as i64),
+      height: value.height.clone(),
+      offset: value.offset.clone(),
     }
   }
 }
@@ -305,12 +295,15 @@ pub struct TxRuneEntry {
   pub divisibility: i16,
   pub etching: String,
   pub parent: Option<String>,
-  pub mint_entry: MintEntryType,
+  pub terms: Option<RuneTerms>,
+  pub mintable: bool,
+  pub mint_type: String,
   pub mints: i64,
   pub number: i64,
   pub rune: BigDecimal,
   pub spacers: i32,
   pub premine: i64,
+  pub remaining: BigDecimal,
   pub spaced_rune: String,
   pub supply: BigDecimal,
   pub symbol: Option<String>,
@@ -332,12 +325,15 @@ pub struct NewTxRuneEntry {
   pub divisibility: i16,
   pub etching: String,
   pub parent: Option<String>,
-  pub mint_entry: MintEntryType,
+  pub terms: Option<RuneTerms>,
+  pub mintable: bool,
+  pub mint_type: String,
   pub mints: i64,
   pub number: i64, //Block
   pub rune: BigDecimal,
   pub spacers: i32,
   pub premine: i64,
+  pub remaining: BigDecimal,
   pub spaced_rune: String,
   pub supply: BigDecimal,
   pub symbol: Option<String>,
@@ -413,4 +409,30 @@ pub struct NewOutpointRuneBalance {
   pub rune_id: String,
   pub address: String,
   pub balance_value: BigDecimal,
+}
+
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = crate::schema::rune_stats)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct RuneStats {
+  pub id: i64,
+  pub block_height: i64,
+  pub rune_id: String,
+  pub mints: i64,
+  pub burned: BigDecimal,
+  pub mintable: bool,
+  pub remaining: BigDecimal,
+  pub aggregated: bool,
+}
+
+#[derive(Insertable, Clone, Debug, Default)]
+#[diesel(table_name = crate::schema::rune_stats)]
+pub struct NewRuneStats {
+  pub block_height: i64,
+  pub rune_id: String,
+  pub mints: i64,
+  pub burned: BigDecimal,
+  pub mintable: bool,
+  pub remaining: BigDecimal,
+  pub aggregated: bool,
 }

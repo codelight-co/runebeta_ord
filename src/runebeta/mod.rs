@@ -3,6 +3,7 @@ mod models;
 pub mod schema;
 mod table_block;
 mod table_outpoint_rune_balance;
+mod table_rune_stats;
 mod table_transaction;
 mod table_transaction_in;
 mod table_transaction_out;
@@ -19,11 +20,13 @@ pub use extension::IndexExtension;
 use lazy_static::lazy_static;
 use std::{
   env,
+  fmt::Debug,
   thread::{self, JoinHandle},
+  time::Instant,
 };
-use std::{fmt::Debug, time::Instant};
 pub use table_block::BlockTable;
 pub use table_outpoint_rune_balance::OutpointRuneBalanceTable;
+pub use table_rune_stats::RuneStatsTable;
 pub use table_transaction_in::TransactionInTable;
 pub use table_transaction_out::TransactionOutTable;
 pub use table_transaction_rune::TransactionRuneTable;

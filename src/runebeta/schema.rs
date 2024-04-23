@@ -25,6 +25,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    rune_stats (id) {
+        id -> Int8,
+        block_height -> Int8,
+        rune_id -> Varchar,
+        mints -> Int8,
+        burned -> Numeric,
+        mintable -> Bool,
+        remaining -> Numeric,
+        aggregated -> Bool,
+    }
+}
+
+diesel::table! {
     spent_outpoint_rune_balances (id) {
         id -> Int8,
         block_height -> Int8,
@@ -108,12 +121,15 @@ diesel::table! {
         divisibility -> Int2,
         etching -> Varchar,
         parent -> Nullable<Varchar>,
+        mintable -> Bool,
+        mint_type -> Varchar,
         mints -> Int8,
         number -> Int8,
-        mint_entry -> Jsonb,
+        terms -> Nullable<Jsonb>,
         rune -> Numeric,
         spacers -> Int4,
         premine -> Int8,
+        remaining -> Numeric,
         spaced_rune -> Varchar,
         supply -> Numeric,
         #[max_length = 1]
@@ -154,14 +170,15 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-    blocks,
-    outpoint_rune_balances,
-    spent_outpoint_rune_balances,
-    spent_transaction_outs,
-    transaction_ins,
-    transaction_outs,
-    transaction_rune_entries,
-    transactions,
-    txid_rune_addresss,
-    txid_runes,
+  blocks,
+  outpoint_rune_balances,
+  rune_stats,
+  spent_outpoint_rune_balances,
+  spent_transaction_outs,
+  transaction_ins,
+  transaction_outs,
+  transaction_rune_entries,
+  transactions,
+  txid_rune_addresss,
+  txid_runes,
 );

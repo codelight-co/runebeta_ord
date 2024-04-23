@@ -60,20 +60,24 @@ CREATE TABLE transaction_rune_entries (
   tx_index INTEGER NOT NULL DEFAULT 0,
   tx_hash VARCHAR NOT NULL,
   rune_id VARCHAR NOT NULL,
+
   burned NUMERIC(40) NOT NULL,
   divisibility SMALLINT NOT NULL,
   -- txid
   etching VARCHAR NOT NULL,
   parent VARCHAR NULL,
+  mintable bool NOT NULL DEFAULT false,
+  mint_type VARCHAR NOT NULL,
   -- So lan mints, initial with 0
   mints BIGINT NOT NULL,
   -- zero based index of rune
   number BIGINT NOT NULL,
   -- Mint entry
-  mint_entry jsonb DEFAULT '{}'::jsonb NOT NULL,
+  terms jsonb NULL,
   rune NUMERIC(40) NOT NULL,
   spacers INTEGER NOT NULL,
   premine BIGINT NOT NULL DEFAULT 0,
+  remaining NUMERIC NOT NULL DEFAULT 0,
   spaced_rune VARCHAR NOT NULL DEFAULT '',
   supply NUMERIC(40) NOT NULL,
   symbol CHAR NULL,

@@ -1,13 +1,13 @@
 use bigdecimal::BigDecimal;
-use bitcoin::Txid;
 use diesel::{associations::HasTable, PgConnection, RunQueryDsl};
 
 use crate::schema::transaction_rune_entries::dsl::*;
 use crate::{InsertRecords, RuneEntry, RuneId};
 
-use super::models::{MintEntryType, NewTxRuneEntry};
+use super::models::{NewTxRuneEntry, RuneTerms};
 pub const NUMBER_OF_FIELDS: u16 = 20;
-
+pub const RUNE_MINT_TYPE_FIXED_CAP: &str = "fixed-cap";
+pub const RUNE_MINT_TYPE_FAIRMINT: &str = "fairmint";
 #[derive(Clone)]
 pub struct TransactionRuneEntryTable {}
 
@@ -15,54 +15,62 @@ impl<'conn> TransactionRuneEntryTable {
   pub fn new() -> Self {
     Self {}
   }
-  // pub fn inserts(
-  //   &self,
-  //   entries: &[NewTxRuneEntry],
-  //   connection: &mut PgConnection,
-  // ) -> Result<usize, diesel::result::Error> {
-  //   diesel::insert_into(transaction_rune_entries::table())
-  //     .values(entries)
-  //     .on_conflict_do_nothing()
-  //     //.returning(OutpointRuneBalance::as_returning())
-  //     .execute(connection)
-  // }
   pub fn create(
     &self,
-    txid: &Txid,
     rune_id_value: &RuneId,
     rune_entry: &RuneEntry,
     connection: &mut PgConnection,
   ) -> Result<usize, diesel::result::Error> {
-    let etching_value = rune_entry.etching.to_string();
-    let symbol_value = rune_entry.symbol.map(|c| c.to_string());
-    let tx_rune_entry = NewTxRuneEntry {
-      tx_hash: txid.to_string(),
-      block_height: rune_id_value.block as i64,
-      tx_index: rune_id_value.tx as i32,
-      rune_id: rune_id_value.to_string(),
+    let mut tx_rune_entry = NewTxRuneEntry::from(rune_entry);
+    tx_rune_entry.tx_index = rune_id_value.tx as i32;
+    tx_rune_entry.rune_id = rune_id_value.to_string();
+    diesel::insert_into(transaction_rune_entries::table())
+      .values(tx_rune_entry)
+      .on_conflict_do_nothing()
+      .execute(connection)
+  }
+}
+/*
+ * missing tx_index, rune_id
+ */
+impl From<&RuneEntry> for NewTxRuneEntry {
+  fn from(rune_entry: &RuneEntry) -> Self {
+    let mint_remain = rune_entry
+      .terms
+      .and_then(|rune_terms| {
+        rune_terms
+          .cap
+          .as_ref()
+          .map(|cap| BigDecimal::from(cap - rune_entry.mints))
+      })
+      .unwrap_or_else(|| BigDecimal::from(0));
+    NewTxRuneEntry {
+      tx_index: 0,
+      rune_id: String::default(),
+      block_height: rune_entry.block as i64,
+      tx_hash: rune_entry.etching.to_string(),
       burned: BigDecimal::from(rune_entry.burned),
       divisibility: rune_entry.divisibility as i16,
-      etching: etching_value,
+      etching: rune_entry.etching.to_string(),
       parent: None,
+      mintable: rune_entry.mintable(rune_entry.block).is_ok(),
+      mint_type: rune_entry.terms.map_or_else(
+        || String::from(RUNE_MINT_TYPE_FIXED_CAP),
+        |_| String::from(RUNE_MINT_TYPE_FAIRMINT),
+      ),
       mints: rune_entry.mints as i64,
       number: rune_entry.block as i64,
       rune: BigDecimal::from(rune_entry.spaced_rune.rune.0),
       spacers: rune_entry.spaced_rune.spacers as i32,
       premine: rune_entry.premine as i64,
+      remaining: mint_remain,
       spaced_rune: rune_entry.spaced_rune.to_string(),
       supply: BigDecimal::from(0_u128),
-      symbol: symbol_value,
+      symbol: rune_entry.symbol.map(|c| c.to_string()),
       timestamp: rune_entry.timestamp as i32,
-      mint_entry: rune_entry
-        .terms
-        .map(|entry| MintEntryType::from(&entry))
-        .unwrap_or_default(),
+      terms: rune_entry.terms.map(|entry| RuneTerms::from(&entry)),
       turbo: rune_entry.turbo,
-    };
-    diesel::insert_into(transaction_rune_entries::table())
-      .values(tx_rune_entry)
-      .on_conflict_do_nothing()
-      .execute(connection)
+    }
   }
 }
 

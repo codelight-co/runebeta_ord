@@ -1,15 +1,12 @@
 use crate::{
   index::lot::Lot,
-  runebeta::{
-    models::{MintEntryType, NewOutpointRuneBalance},
-    OutpointRuneBalanceTable,
-  },
-  Chain, InsertRecords, RuneEntry, RuneId, TransactionRuneTable,
+  runebeta::{models::NewOutpointRuneBalance, OutpointRuneBalanceTable},
+  Chain, InsertRecords, RuneEntry, RuneId, RuneStatsTable, TransactionRuneTable,
 };
 
 use super::{
   models::{
-    CenotaphValue, NewBlock, NewTransaction, NewTransactionIn, NewTransactionOut,
+    CenotaphValue, NewBlock, NewRuneStats, NewTransaction, NewTransactionIn, NewTransactionOut,
     NewTransactionRune, NewTxRuneEntry, RunestoneValue,
   },
   table_transaction::TransactionTable,
@@ -51,6 +48,7 @@ pub struct IndexBlock {
   outpoint_balances: Mutex<Vec<NewOutpointRuneBalance>>,
   tx_runes: Mutex<Vec<NewTransactionRune>>,
   rune_entries: Mutex<Vec<NewTxRuneEntry>>,
+  rune_stats: Mutex<HashMap<RuneId, NewRuneStats>>,
 }
 impl IndexBlock {
   pub fn new(height: u64) -> Self {
@@ -122,24 +120,28 @@ impl IndexBlock {
       log::info!("Cannot lock the raw_tx_ins for insert item");
     }
   }
-  // pub fn get_size(&self) -> u128 {
-  //   self.blocks.len() as u128
-  //     + self.transactions.len() as u128
-  //     + self.transaction_ins.len() as u128
-  //     + self.transaction_outs.len() as u128
-  //     + self.outpoint_balances.len() as u128
-  //     + self.rune_entries.len() as u128
-  //     + self.tx_ins.len() as u128
-  // }
-  // fn _clear(&mut self) {
-  //   self.blocks.clear();
-  //   self.transactions.clear();
-  //   self.transaction_ins.clear();
-  //   self.transaction_outs.clear();
-  //   self.tx_ins.clear();
-  //   self.rune_entries.clear();
-  //   self.outpoint_balances.clear();
-  // }
+  fn add_rune_mint(&self, rune_id: &RuneId) {
+    if let Ok(ref mut rune_stats) = self.rune_stats.try_lock() {
+      let rune_stat = rune_stats
+        .entry(rune_id.clone())
+        .or_insert_with(|| NewRuneStats::default());
+      rune_stat.mints = rune_stat.mints + 1
+    } else {
+      log::info!("Cannot lock the raw_tx_ins for insert item");
+    }
+  }
+  fn add_rune_burned(&self, burned: &HashMap<RuneId, Lot>) {
+    if let Ok(ref mut rune_stats) = self.rune_stats.try_lock() {
+      for (rune_id, amount) in burned {
+        let rune_stat = rune_stats
+          .entry(rune_id.clone())
+          .or_insert_with(|| NewRuneStats::default());
+        rune_stat.burned = &rune_stat.burned + amount.0
+      }
+    } else {
+      log::info!("Cannot lock the raw_tx_ins for insert item");
+    }
+  }
 }
 #[derive(Debug)]
 pub struct IndexExtension {
@@ -155,6 +157,7 @@ pub struct IndexExtension {
   index_log: RwLock<HashMap<i64, u128>>,
 }
 impl IndexExtension {
+  //Todo: load all rune entry for updating minable in each block
   pub fn new(chain: Chain) -> Self {
     dotenv().ok();
     let index_all_transaction =
@@ -446,32 +449,11 @@ impl IndexExtension {
     txid: &Txid,
     rune_id: &RuneId,
     rune_entry: &RuneEntry,
-  ) -> Result<(), diesel::result::Error> {
+  ) -> anyhow::Result<()> {
     log::debug!("Runebeta index transaction rune {}, rune {}", txid, rune_id);
-    let tx_rune_entry = NewTxRuneEntry {
-      tx_hash: txid.to_string(),
-      block_height: rune_id.block as i64,
-      tx_index: rune_id.tx as i32,
-      rune_id: rune_id.to_string(),
-      burned: BigDecimal::from(rune_entry.burned),
-      divisibility: rune_entry.divisibility as i16,
-      etching: rune_entry.etching.to_string(),
-      parent: None,
-      mints: rune_entry.mints as i64,
-      number: rune_entry.block as i64,
-      rune: BigDecimal::from(rune_entry.spaced_rune.rune.0),
-      spacers: rune_entry.spaced_rune.spacers as i32,
-      premine: rune_entry.premine as i64,
-      spaced_rune: rune_entry.spaced_rune.to_string(),
-      supply: BigDecimal::from(0_u128),
-      symbol: rune_entry.symbol.map(|c| c.to_string()),
-      timestamp: rune_entry.timestamp as i32,
-      mint_entry: rune_entry
-        .terms
-        .map(|entry| MintEntryType::from(&entry))
-        .unwrap_or_default(),
-      turbo: rune_entry.turbo,
-    };
+    let mut tx_rune_entry = NewTxRuneEntry::from(rune_entry);
+    tx_rune_entry.tx_index = rune_id.tx as i32;
+    tx_rune_entry.rune_id = rune_id.to_string();
     let height = rune_id.block.clone();
     let index_block = match self.get_block_cache(height as u64) {
       Some(cache) => cache,
@@ -484,7 +466,34 @@ impl IndexExtension {
     index_block.add_rune_entry(tx_rune_entry);
     Ok(())
   }
-
+  pub fn index_rune_mint(&self, height: u32, rune_id: &RuneId) -> anyhow::Result<()> {
+    let index_block = match self.get_block_cache(height as u64) {
+      Some(cache) => cache,
+      None => {
+        let new_index_block = Arc::new(IndexBlock::new(height as u64));
+        self.add_index_block(Arc::clone(&new_index_block));
+        new_index_block
+      }
+    };
+    index_block.add_rune_mint(rune_id);
+    Ok(())
+  }
+  pub fn index_rune_burned(
+    &self,
+    height: u32,
+    burned: &HashMap<RuneId, Lot>,
+  ) -> anyhow::Result<()> {
+    let index_block = match self.get_block_cache(height as u64) {
+      Some(cache) => cache,
+      None => {
+        let new_index_block = Arc::new(IndexBlock::new(height as u64));
+        self.add_index_block(Arc::clone(&new_index_block));
+        new_index_block
+      }
+    };
+    index_block.add_rune_burned(burned);
+    Ok(())
+  }
   pub fn index_outpoint_balances(
     &self,
     block_height: i64,
@@ -608,7 +617,7 @@ impl IndexExtension {
       let table_outpoint_balance = OutpointRuneBalanceTable::new();
       let table_transaction_rune = TransactionRuneTable::new();
       let table_transaction_rune_entry = TransactionRuneEntryTable::new();
-
+      let table_rune_stats = RuneStatsTable::new();
       //Insert records in transactional manner for each block
       //self.index_cache.iter().for_each(transactional_insert);
       //Insert all records without transactional
@@ -620,10 +629,11 @@ impl IndexExtension {
       let mut total_outpoint_balances = vec![];
       let mut total_tx_runes = vec![];
       let mut total_rune_entries = vec![];
+      let mut total_rune_stats = Vec::<(u64, Vec<NewRuneStats>)>::default();
       let mut total_tx_ins = vec![];
       for index_block in processing_cache {
         let Some(IndexBlock {
-          block_height: _block_height,
+          block_height,
           raw_tx_ins,
           blocks,
           transactions,
@@ -632,6 +642,7 @@ impl IndexExtension {
           outpoint_balances,
           tx_runes,
           rune_entries,
+          rune_stats,
         }) = Arc::try_unwrap(index_block).ok()
         else {
           break;
@@ -659,6 +670,17 @@ impl IndexExtension {
         }
         if let Ok(ref mut raw_tx_ins) = raw_tx_ins.into_inner() {
           total_tx_ins.append(raw_tx_ins);
+        }
+        /*
+         * Run update stat inseparate thread
+         * Thi thread update rune entry table block by block
+         */
+        if let Ok(ref mut rune_stats) = rune_stats.into_inner() {
+          let stats = rune_stats
+            .into_iter()
+            .map(|(_, value)| value.clone())
+            .collect();
+          total_rune_stats.push((block_height, stats));
         }
       }
       if let Ok(ref mut res) = table_block.insert_vector(total_blocks, self.connection_pool.clone())
@@ -690,10 +712,19 @@ impl IndexExtension {
       {
         handles.append(res);
       }
-      if let Ok(ref mut res) =
-        table_transaction_rune_entry.insert_vector(total_rune_entries, self.connection_pool.clone())
-      {
-        handles.append(res);
+      if total_rune_stats.len() > 0 {
+        if let Ok(ref mut res) =
+          table_rune_stats.update(total_rune_stats, self.connection_pool.clone())
+        {
+          handles.append(res);
+        }
+      }
+      if total_rune_entries.len() > 0 {
+        if let Ok(ref mut res) = table_transaction_rune_entry
+          .insert_vector(total_rune_entries, self.connection_pool.clone())
+        {
+          handles.append(res);
+        }
       }
       if total_tx_ins.len() > 0 {
         //move spent utxo to spent tx_output table
