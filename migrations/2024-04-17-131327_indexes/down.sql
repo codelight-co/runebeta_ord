@@ -19,3 +19,7 @@ DROP INDEX transaction_rune_entries_rune_id_idx;
 
 DROP INDEX transactions_tx_hash_idx;
 DROP INDEX transactions_block_height_idx;
+
+DROP INDEX txid_runes_tx_hash_idx;
+DROP INDEX txid_runes_tx_index_idx;
+DROP INDEX txid_runes_block_height_idx;

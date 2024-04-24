@@ -299,8 +299,8 @@ impl IndexExtension {
       log::info!(
         "[Benchmark]#{} blocks|{}-{}|{}|{}|{}",
         last - first + 1,
-        last,
         first,
+        last,
         start,
         current,
         current - start

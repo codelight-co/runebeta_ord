@@ -11,6 +11,11 @@ pub const RUNE_MINT_TYPE_FIXED_CAP: &str = "fixed-cap";
 pub const RUNE_MINT_TYPE_FAIRMINT: &str = "fairmint";
 
 pub fn create_update_rune_mintable(height: &u64) -> SqlQuery {
+  /*
+   * Just update record with folowing conditions
+   * mint_type id fairmint, fixedcap alway has mintable = false
+   * mintable is true and mints >= cap -> mintable = false then no need update anymore
+   */
   let query = format!(
     r#"UPDATE transaction_rune_entries 
         SET mintable = COALESCE (offset_start , -block_height) + block_height <= {0} 
@@ -18,7 +23,7 @@ pub fn create_update_rune_mintable(height: &u64) -> SqlQuery {
       	AND COALESCE (offset_end , {0} - block_height) + block_height >= {0}  
       	AND COALESCE(height_end, {0} ) >= {0} 
       	AND cap > mints
-    WHERE terms IS NOT NULL;"#,
+    WHERE terms IS NOT NULL AND mintable AND (mints >= cap);"#,
     height
   );
   diesel::sql_query(query)
