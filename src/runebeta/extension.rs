@@ -591,6 +591,9 @@ impl IndexExtension {
     index_block.append_outpoint_rune_balances(&mut outpoint_balances);
     Ok(len)
   }
+  /*
+   * Create Outpoint balance directly from allocated data
+   */
   pub fn index_outpoint_balances_v2(
     &self,
     block_height: i64,
@@ -632,7 +635,8 @@ impl IndexExtension {
         new_index_block
       }
     };
-    if allocated.len() > 0 {
+    let len = outpoint_balances.len();
+    if len > 0 {
       let tx_rune = NewTransactionRune {
         block_height,
         tx_index: tx_index as i32,
@@ -640,7 +644,6 @@ impl IndexExtension {
       };
       index_block.add_tx_rune(tx_rune);
     }
-    let len = outpoint_balances.len();
     index_block.append_outpoint_rune_balances(&mut outpoint_balances);
     Ok(len)
   }
