@@ -19,3 +19,7 @@ CREATE INDEX transaction_rune_entries_rune_id_idx ON public.transaction_rune_ent
 
 CREATE INDEX transactions_tx_hash_idx ON public.transactions (tx_hash);
 CREATE INDEX transactions_block_height_idx ON public.transactions (block_height);
+
+CREATE INDEX txid_runes_tx_hash_idx ON public.txid_runes (tx_hash);
+CREATE INDEX txid_runes_tx_index_idx ON public.txid_runes (tx_index);
+CREATE INDEX txid_runes_block_height_idx ON public.txid_runes (block_height);
