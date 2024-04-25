@@ -661,19 +661,7 @@ impl IndexExtension {
       }
     }
     if processing_cache.len() > 0 {
-      //let mut connection = self.get_connection().map_err(|err| anyhow!(err))?;
-      //Sucess establist db connection
-      let table_block = BlockTable::new();
-      let table_tranction = TransactionTable::new();
-      let table_transaction_in = TransactionInTable::new();
-      let table_transaction_out = TransactionOutTable::new();
-
-      let table_outpoint_balance = OutpointRuneBalanceTable::new();
-      let table_transaction_rune = TransactionRuneTable::new();
-      let table_transaction_rune_entry = TransactionRuneEntryTable::new();
-      let table_rune_stats = RuneStatsTable::new();
-      //Insert records in transactional manner for each block
-      //self.index_cache.iter().for_each(transactional_insert);
+      //0. Prepare all data for write to pg db
       //Insert all records without transactional
       //Insert into blocks
       let mut total_blocks = vec![];
@@ -682,9 +670,9 @@ impl IndexExtension {
       let mut total_transaction_outs = vec![];
       let mut total_outpoint_balances = vec![];
       let mut total_tx_runes = vec![];
+      let mut total_tx_ins = vec![];
       let mut total_rune_entries = vec![];
       let mut total_rune_stats = Vec::<(u64, Vec<NewRuneStats>)>::default();
-      let mut total_tx_ins = vec![];
       for index_block in processing_cache {
         let Some(IndexBlock {
           block_height,
@@ -726,8 +714,8 @@ impl IndexExtension {
           total_tx_ins.append(raw_tx_ins);
         }
         /*
-         * Run update stat inseparate thread
-         * Thi thread update rune entry table block by block
+         * Prepare all rune stat for each block then run update stat in separated thread
+         * This thread update rune entry table block by block
          */
         if let Ok(ref mut rune_stats) = rune_stats.into_inner() {
           let stats = rune_stats
@@ -741,64 +729,142 @@ impl IndexExtension {
         .iter()
         .map(|block| block.block_height.clone())
         .collect::<Vec<i64>>();
-      if let Ok(ref mut res) = table_block.insert_vector(total_blocks, self.connection_pool.clone())
-      {
-        block_heights.replace(heights);
-        handles.append(res);
-      }
-      if let Ok(ref mut res) =
-        table_tranction.insert_vector(total_transactions, self.connection_pool.clone())
-      {
-        handles.append(res);
-      }
-      if let Ok(ref mut res) =
-        table_transaction_in.insert_vector(total_transaction_ins, self.connection_pool.clone())
-      {
-        handles.append(res);
-      }
-      if let Ok(ref mut res) =
-        table_transaction_out.insert_vector(total_transaction_outs, self.connection_pool.clone())
-      {
-        handles.append(res);
-      }
-      if let Ok(ref mut res) =
-        table_outpoint_balance.insert_vector(total_outpoint_balances, self.connection_pool.clone())
-      {
-        handles.append(res);
-      }
-      if let Ok(ref mut res) =
-        table_transaction_rune.insert_vector(total_tx_runes, self.connection_pool.clone())
-      {
-        handles.append(res);
-      }
-      if total_rune_stats.len() > 0 {
-        if let Ok(ref mut res) =
-          table_rune_stats.update(total_rune_stats, self.connection_pool.clone())
-        {
-          handles.append(res);
-        }
-      }
-      if total_rune_entries.len() > 0 {
-        if let Ok(ref mut res) = table_transaction_rune_entry
-          .insert_vector(total_rune_entries, self.connection_pool.clone())
-        {
-          handles.append(res);
-        }
-      }
-      if total_tx_ins.len() > 0 {
-        //move spent utxo to spent tx_output table
-        if let Ok(ref mut res) =
-          table_outpoint_balance.spends(total_tx_ins.clone(), self.connection_pool.clone())
-        {
-          handles.append(res);
-        }
-        if let Ok(ref mut res) =
-          table_transaction_out.spends(total_tx_ins, self.connection_pool.clone())
-        {
-          handles.append(res);
-        }
-      }
+      block_heights.replace(heights);
+      /*
+       * Apr 28
+       * Move this code to 2nd phase, after other thread finish
+       * There is a case when some utxo is spent in the same block in which it is created
+       */
+      //1. Insert new records in to db
+      let insert_handles = self.perform_insert(
+        total_blocks,
+        total_transactions,
+        total_transaction_ins,
+        total_transaction_outs,
+        total_outpoint_balances,
+        total_tx_runes,
+        total_rune_entries,
+      );
+      //2. Waiting for all thread in 1st phase to finish, then move out spent utxo
+      let move_spent_utxo_handles =
+        self.perform_move_spent(insert_handles, total_tx_ins, self.connection_pool.clone());
+      //3. Update statistic for runes
+      let mut stat_handles = self.perform_stat_update(
+        move_spent_utxo_handles,
+        total_rune_stats,
+        self.connection_pool.clone(),
+      );
+      handles.append(&mut stat_handles);
     }
     Ok((handles, block_heights.unwrap_or_default()))
+  }
+  fn perform_insert(
+    &self,
+    total_blocks: Vec<NewBlock>,
+    total_transactions: Vec<NewTransaction>,
+    total_transaction_ins: Vec<NewTransactionIn>,
+    total_transaction_outs: Vec<NewTransactionOut>,
+    total_outpoint_balances: Vec<NewOutpointRuneBalance>,
+    total_tx_runes: Vec<NewTransactionRune>,
+    total_rune_entries: Vec<NewTxRuneEntry>,
+  ) -> Vec<JoinHandle<()>> {
+    let mut handles = vec![];
+    let table_block = BlockTable::new();
+    let table_tranction = TransactionTable::new();
+    let table_transaction_in = TransactionInTable::new();
+    let table_transaction_out = TransactionOutTable::new();
+    let table_outpoint_balance = OutpointRuneBalanceTable::new();
+    let table_transaction_rune = TransactionRuneTable::new();
+    let table_transaction_rune_entry = TransactionRuneEntryTable::new();
+    if let Ok(ref mut res) = table_block.insert_vector(total_blocks, self.connection_pool.clone()) {
+      handles.append(res);
+    }
+    if let Ok(ref mut res) =
+      table_tranction.insert_vector(total_transactions, self.connection_pool.clone())
+    {
+      handles.append(res);
+    }
+
+    if let Ok(ref mut res) =
+      table_transaction_in.insert_vector(total_transaction_ins, self.connection_pool.clone())
+    {
+      handles.append(res);
+    }
+    if let Ok(ref mut res) =
+      table_transaction_out.insert_vector(total_transaction_outs, self.connection_pool.clone())
+    {
+      handles.append(res);
+    }
+    if let Ok(ref mut res) =
+      table_outpoint_balance.insert_vector(total_outpoint_balances, self.connection_pool.clone())
+    {
+      handles.append(res);
+    }
+    if let Ok(ref mut res) =
+      table_transaction_rune.insert_vector(total_tx_runes, self.connection_pool.clone())
+    {
+      handles.append(res);
+    }
+    if total_rune_entries.len() > 0 {
+      if let Ok(ref mut res) =
+        table_transaction_rune_entry.insert_vector(total_rune_entries, self.connection_pool.clone())
+      {
+        handles.append(res);
+      }
+    }
+    handles
+  }
+  fn perform_move_spent(
+    &self,
+    insert_handles: Vec<JoinHandle<()>>,
+    total_tx_ins: Vec<String>,
+    conn_pool: Pool<ConnectionManager<PgConnection>>,
+  ) -> Vec<JoinHandle<()>> {
+    let handle = thread::spawn(move || {
+      insert_handles.into_iter().for_each(|hanlde| {
+        let _ = hanlde.join();
+      });
+      let mut move_spents = vec![];
+      if total_tx_ins.len() > 0 {
+        //move spent utxo to spent tx_output table
+        let table_outpoint_balance = OutpointRuneBalanceTable::new();
+        let table_transaction_out = TransactionOutTable::new();
+        if let Ok(ref mut res) =
+          table_outpoint_balance.spends(total_tx_ins.clone(), conn_pool.clone())
+        {
+          move_spents.append(res);
+        }
+        if let Ok(ref mut res) = table_transaction_out.spends(total_tx_ins, conn_pool.clone()) {
+          move_spents.append(res);
+        }
+      }
+      move_spents.into_iter().for_each(|hanlde| {
+        let _ = hanlde.join();
+      });
+    });
+    vec![handle]
+  }
+  fn perform_stat_update(
+    &self,
+    move_spent_handles: Vec<JoinHandle<()>>,
+    total_rune_stats: Vec<(u64, Vec<NewRuneStats>)>,
+    conn_pool: Pool<ConnectionManager<PgConnection>>,
+  ) -> Vec<JoinHandle<()>> {
+    let handle = thread::spawn(move || {
+      move_spent_handles.into_iter().for_each(|hanlde| {
+        let _ = hanlde.join();
+      });
+      let mut stat_handles = vec![];
+      if total_rune_stats.len() > 0 {
+        let table_rune_stats = RuneStatsTable::new();
+        if let Ok(ref mut res) = table_rune_stats.update(total_rune_stats, conn_pool) {
+          stat_handles.append(res);
+        }
+      }
+      stat_handles.into_iter().for_each(|hanlde| {
+        let _ = hanlde.join();
+      });
+    });
+    vec![handle]
   }
 }
