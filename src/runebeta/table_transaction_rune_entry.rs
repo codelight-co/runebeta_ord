@@ -20,7 +20,7 @@ pub fn create_update_rune_mintable(height: &u64) -> SqlQuery {
       AND COALESCE (offset_end , {0} - block_height) + block_height >= {0}  
       AND COALESCE(height_end, {0} ) >= {0} 
       AND cap > mints
-    WHERE terms IS NOT NULL AND ((mintable OR (IS NOT mintable AND (mints <= cap)));"#,
+    WHERE terms IS NOT NULL AND (mintable OR ((NOT mintable) AND (mints <= cap)));"#,
     height
   );
   diesel::sql_query(query)
