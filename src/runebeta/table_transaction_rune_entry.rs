@@ -6,26 +6,39 @@ use crate::schema::transaction_rune_entries::dsl::*;
 use crate::{InsertRecords, RuneEntry, RuneId};
 
 use super::models::{NewTxRuneEntry, RuneTerms};
-pub const NUMBER_OF_FIELDS: u16 = 28;
+pub const NUMBER_OF_FIELDS: u16 = 30;
 pub const RUNE_MINT_TYPE_FIXED_CAP: &str = "fixed-cap";
 pub const RUNE_MINT_TYPE_FAIRMINT: &str = "fairmint";
 
 pub fn create_update_rune_mintable(height: &u64) -> SqlQuery {
-  /*
-   * Just update record with folowing conditions
-   * mint_type id fairmint, fixedcap alway has mintable = false
-   * mintable is true and mints >= cap -> mintable = false then no need update anymore
-   */
+  //
   let query = format!(
-    r#"UPDATE transaction_rune_entries 
-        SET mintable = COALESCE (offset_start , -block_height) + block_height <= {0} 
-      				AND COALESCE (height_start, 0) <= {0}
-      	AND COALESCE (offset_end , {0} - block_height) + block_height >= {0}  
-      	AND COALESCE(height_end, {0} ) >= {0} 
-      	AND cap > mints
-    WHERE terms IS NOT NULL AND mintable AND (mints >= cap);"#,
+    r#"
+    UPDATE transaction_rune_entries 
+      SET mintable = COALESCE (offset_start , -block_height) + block_height <= {0} 
+            AND COALESCE (height_start, 0) <= {0}
+      AND COALESCE (offset_end , {0} - block_height) + block_height >= {0}  
+      AND COALESCE(height_end, {0} ) >= {0} 
+      AND cap > mints
+    WHERE terms IS NOT NULL AND ((mintable OR (IS NOT mintable AND (mints <= cap)));"#,
     height
   );
+  diesel::sql_query(query)
+}
+
+pub fn create_update_rune_total_holders() -> SqlQuery {
+  let query = r"
+  WITH rune_total_holders AS (
+    SELECT COUNT(DISTINCT address) AS total_holders, rune_id
+    FROM outpoint_rune_balances
+    WHERE balance_value > 0
+    GROUP BY rune_id
+  )
+  UPDATE transaction_rune_entries
+  SET total_holders = rtd.total_holders
+  FROM rune_total_holders rtd
+  WHERE transaction_rune_entries.rune_id = rtd.rune_id;
+  ";
   diesel::sql_query(query)
 }
 
@@ -74,6 +87,8 @@ impl From<&RuneEntry> for NewTxRuneEntry {
       divisibility: rune_entry.divisibility as i16,
       etching: rune_entry.etching.to_string(),
       parent: None,
+      total_tx_count: 0,
+      total_holders: 0,
       mintable: rune_entry.mintable(rune_entry.block).is_ok(),
       mint_type: rune_entry.terms.map_or_else(
         || String::from(RUNE_MINT_TYPE_FIXED_CAP),

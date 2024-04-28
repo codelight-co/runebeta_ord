@@ -10,22 +10,25 @@ use crate::schema::rune_stats::dsl::*;
 use crate::{calculate_chunk_size, split_input, InsertRecords};
 
 use super::models::NewRuneStats;
-use super::table_transaction_rune_entry::create_update_rune_mintable;
-pub const NUMBER_OF_FIELDS: u16 = 8;
+use super::table_transaction_rune_entry::{
+  create_update_rune_mintable, create_update_rune_total_holders,
+};
+pub const NUMBER_OF_FIELDS: u16 = 10;
 
 pub fn create_update_rune_entry(height: &u64) -> SqlQuery {
   let query = format!(
     r#"
-      UPDATE transaction_rune_entries e SET 
-        mints = e.mints + s.mints, 
-        supply = e.supply + s.mints * s.mint_amount,
-        burned = e.burned + s.burned,  
-        remaining = e.remaining - s.mints
-      FROM rune_stats s
-      WHERE s.block_height = {} 
-      AND s.aggregated = false
-      AND e.rune_id = s.rune_id;
-      "#,
+    UPDATE transaction_rune_entries e SET 
+    mints = e.mints + s.mints, 
+    supply = e.supply + s.mint_amount * s.mints,
+    burned = e.burned + s.burned,  
+    remaining = e.remaining - s.mints,
+    total_tx_count = e.total_tx_count + s.tx_count
+    FROM rune_stats s
+    WHERE s.block_height = {} 
+    AND s.aggregated = false
+    AND e.rune_id = s.rune_id;
+    "#,
     height
   );
   diesel::sql_query(query)
@@ -39,6 +42,25 @@ pub fn create_update_rune_stats(heights: &Vec<u64>) -> SqlQuery {
       .map(|h| h.to_string())
       .collect::<Vec<String>>()
       .join(",")
+  );
+  diesel::sql_query(query)
+}
+
+pub fn create_update_rune_stats_total_holders(height: &u64) -> SqlQuery {
+  let query = format!(
+    r"
+  WITH rune_total_holders AS (
+    SELECT COUNT(DISTINCT address) AS total_holders, rune_id
+    FROM outpoint_rune_balances
+    WHERE balance_value > 0 AND block_height <= {}
+    GROUP BY rune_id
+  )
+  UPDATE rune_stats
+  SET total_holders = rtd.total_holders
+  FROM rune_total_holders rtd
+  WHERE rune_stats.rune_id = rtd.rune_id;
+  ",
+    height
   );
   diesel::sql_query(query)
 }
@@ -105,6 +127,19 @@ impl RuneStatsTable {
                   return rune_res;
                 }
               }
+              let update_rune_stat = create_update_rune_stats_total_holders(height);
+              let stat_res = update_rune_stat.execute(conn);
+              match &stat_res {
+                Ok(_) => log::info!(
+                  "Updated rune stats total holders for blocks {:?} in {} ms",
+                  heights,
+                  start.elapsed().as_millis()
+                ),
+                Err(err) => {
+                  log::info!("Updated rune stats total holders error {:?}", err);
+                  return stat_res;
+                }
+              };
             }
             let update_rune_stat = create_update_rune_stats(&heights);
             let stat_res = update_rune_stat.execute(conn);
@@ -135,6 +170,20 @@ impl RuneStatsTable {
                 }
               };
             }
+            //Update total holders for rune entries
+            let update_rune_total_holders = create_update_rune_total_holders();
+            let stat_res = update_rune_total_holders.execute(conn);
+            match &stat_res {
+              Ok(_) => log::info!(
+                "Updated rune entries total holders for blocks {:?} in {} ms",
+                heights,
+                start.elapsed().as_millis()
+              ),
+              Err(err) => {
+                log::info!("Update rune entries total holders error {:?}", err);
+                return stat_res;
+              }
+            };
 
             Ok(size)
           });

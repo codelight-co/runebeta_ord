@@ -323,13 +323,6 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
         }
       }
     };
-    /*
-     * Taivv April 03, index data to postgres
-     */
-
-    let _ = self
-      .extension
-      .index_transaction_rune_entry(&txid, &id, &entry);
 
     self.id_to_entry.insert(id.store(), entry.store())?;
 
@@ -342,16 +335,22 @@ impl<'a, 'tx, 'client> RuneUpdater<'a, 'tx, 'client> {
     }
 
     let inscription_id = InscriptionId { txid, index: 0 };
-
+    let mut parent = None;
     if let Some(sequence_number) = self
       .inscription_id_to_sequence_number
       .get(&inscription_id.store())?
     {
+      parent.replace(inscription_id);
       self
         .sequence_number_to_rune_id
         .insert(sequence_number.value(), id.store())?;
     }
-
+    /*
+     * Taivv April 03, index data to postgres
+     */
+    let _ = self
+      .extension
+      .index_transaction_rune_entry(&txid, &id, &entry, &parent);
     Ok(())
   }
 

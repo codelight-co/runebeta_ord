@@ -1,5 +1,6 @@
 use crate::{
   index::lot::Lot,
+  inscriptions::inscription_id::InscriptionId,
   runebeta::{models::NewOutpointRuneBalance, OutpointRuneBalanceTable},
   Chain, InsertRecords, RuneEntry, RuneId, RuneStatsTable, TransactionRuneTable,
 };
@@ -149,6 +150,22 @@ impl IndexBlock {
       }
     } else {
       log::info!("Cannot lock the raw_tx_ins for insert item");
+    }
+  }
+  fn add_rune_tx_count(&self, block_height: i64, tx_counts: &HashMap<RuneId, i64>) {
+    if let Ok(ref mut rune_stats) = self.rune_stats.try_lock() {
+      for (rune_id, tx_count) in tx_counts {
+        let rune_stat = rune_stats
+          .entry(rune_id.clone())
+          .or_insert_with(|| NewRuneStats {
+            block_height,
+            rune_id: rune_id.to_string(),
+            ..Default::default()
+          });
+        rune_stat.tx_count = &rune_stat.tx_count + tx_count;
+      }
+    } else {
+      log::info!("Cannot lock the raw_tx_ins for intert item");
     }
   }
 }
@@ -495,11 +512,14 @@ impl IndexExtension {
     txid: &Txid,
     rune_id: &RuneId,
     rune_entry: &RuneEntry,
+    parent: &Option<InscriptionId>,
   ) -> anyhow::Result<()> {
     log::debug!("Runebeta index transaction rune {}, rune {}", txid, rune_id);
     let mut tx_rune_entry = NewTxRuneEntry::from(rune_entry);
     tx_rune_entry.tx_index = rune_id.tx as i32;
     tx_rune_entry.rune_id = rune_id.to_string();
+    tx_rune_entry.parent = parent.map(|v| v.to_string());
+
     let height = rune_id.block.clone();
     let index_block = match self.get_block_cache(height as u64) {
       Some(cache) => cache,
@@ -603,16 +623,17 @@ impl IndexExtension {
   ) -> Result<usize, diesel::result::Error> {
     let network = self.chain.network();
     let mut outpoint_balances = vec![];
+    let mut tx_counts: HashMap<RuneId, i64> = HashMap::new();
     let txid = transaction.txid();
-    for (vout, balanaces) in allocated.iter().enumerate() {
-      if balanaces.is_empty() {
+    for (vout, balances) in allocated.iter().enumerate() {
+      if balances.is_empty() {
         continue;
       }
       if let Some(tx_out) = transaction.output.get(vout) {
         let address = Address::from_script(&tx_out.script_pubkey, network.clone()).ok();
         let address = address.map(|addr| addr.to_string());
         let address = address.map(|addr| addr.to_string()).unwrap_or_default();
-        for (rune_id, lot) in balanaces {
+        for (rune_id, lot) in balances {
           let outpoint_balance = NewOutpointRuneBalance {
             block_height,
             tx_index: tx_index as i32,
@@ -624,6 +645,7 @@ impl IndexExtension {
             balance_value: BigDecimal::from(lot.0),
           };
           outpoint_balances.push(outpoint_balance);
+          *tx_counts.entry(rune_id.clone()).or_insert(0) += 1;
         }
       }
     }
@@ -643,6 +665,7 @@ impl IndexExtension {
         tx_hash: txid.to_string(),
       };
       index_block.add_tx_rune(tx_rune);
+      index_block.add_rune_tx_count(block_height, &tx_counts);
     }
     index_block.append_outpoint_rune_balances(&mut outpoint_balances);
     Ok(len)

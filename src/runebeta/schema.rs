@@ -36,6 +36,8 @@ diesel::table! {
         burned -> Numeric,
         remaining -> Numeric,
         aggregated -> Bool,
+        tx_count -> Int8,
+        total_holders -> Int8,
     }
 }
 
@@ -143,6 +145,8 @@ diesel::table! {
         symbol -> Nullable<Bpchar>,
         turbo -> Bool,
         timestamp -> Int4,
+        total_tx_count -> Int8,
+        total_holders -> Int8,
     }
 }
 

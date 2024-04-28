@@ -438,52 +438,6 @@ impl<'index> Updater<'index> {
       .map(|(number, _id)| number.value() + 1)
       .unwrap_or(0);
 
-    /*
-     * 2024 Apr 22
-     * Supersats: Index runes before inscriptions
-     */
-    if self.index.index_runes && self.height >= self.index.settings.first_rune_height() {
-      let mut outpoint_to_rune_balances = wtx.open_table(OUTPOINT_TO_RUNE_BALANCES)?;
-      let mut rune_id_to_rune_entry = wtx.open_table(RUNE_ID_TO_RUNE_ENTRY)?;
-      let mut rune_to_rune_id = wtx.open_table(RUNE_TO_RUNE_ID)?;
-      let mut sequence_number_to_rune_id = wtx.open_table(SEQUENCE_NUMBER_TO_RUNE_ID)?;
-      let mut transaction_id_to_rune = wtx.open_table(TRANSACTION_ID_TO_RUNE)?;
-
-      let runes = statistic_to_count
-        .get(&Statistic::Runes.into())?
-        .map(|x| x.value())
-        .unwrap_or(0);
-
-      let mut rune_updater = RuneUpdater {
-        event_sender: self.index.event_sender.as_ref(),
-        block_time: block.header.time,
-        burned: HashMap::new(),
-        client: &self.index.client,
-        height: self.height,
-        id_to_entry: &mut rune_id_to_rune_entry,
-        inscription_id_to_sequence_number: &mut inscription_id_to_sequence_number,
-        minimum: Rune::minimum_at_height(
-          self.index.settings.chain().network(),
-          Height(self.height),
-        ),
-        outpoint_to_balances: &mut outpoint_to_rune_balances,
-        rune_to_id: &mut rune_to_rune_id,
-        runes,
-        sequence_number_to_rune_id: &mut sequence_number_to_rune_id,
-        statistic_to_count: &mut statistic_to_count,
-        transaction_id_to_rune: &mut transaction_id_to_rune,
-        extension, // Add externsion here
-      };
-      for (i, (tx, txid)) in block.txdata.iter().enumerate() {
-        rune_updater.index_runes(u32::try_from(i).unwrap(), tx, *txid)?;
-      }
-      rune_updater.update()?;
-      log::info!(
-        "Runes indexed in {} ms",
-        (Instant::now() - start).as_millis()
-      );
-    }
-
     let home_inscription_count = home_inscriptions.len()?;
 
     let mut inscription_updater = InscriptionUpdater {
@@ -648,8 +602,7 @@ impl<'index> Updater<'index> {
       &Statistic::UnboundInscriptions.key(),
       &inscription_updater.unbound_inscriptions,
     )?;
-    //Supersats: Try index runes before inscription for better performance
-    /*
+
     if self.index.index_runes && self.height >= self.index.settings.first_rune_height() {
       let mut outpoint_to_rune_balances = wtx.open_table(OUTPOINT_TO_RUNE_BALANCES)?;
       let mut rune_id_to_rune_entry = wtx.open_table(RUNE_ID_TO_RUNE_ENTRY)?;
@@ -691,7 +644,7 @@ impl<'index> Updater<'index> {
       }
       rune_updater.update()?;
     }
-    */
+
     height_to_block_header.insert(&self.height, &block.header.store())?;
 
     self.height += 1;
